@@ -1,21 +1,24 @@
-# orbit-targets
+# Orbit Targets
 
+A collection of scripts implementing processes and workflows to use as
 [Orbit](https://github.com/chaseruskin/orbit) targets for FPGA development.
 
 ## Available Tools
 
-The following tools have target implementations:
+The following simulators/toolchains are supported:
 
-### Simulators
-- GHDL
-- ModelSim
-- Vivado Simulator
+Tool | Target(s) | Build | Test
+-- | -- | -- | -- 
+GHDL | `gsim` | y | y
+ModelSim | `msim` | y | y
+Vivado Simulator | `xsim` | y | y
+Vivado | `voodoo`, `xpro` | y |
+Quartus | `quartz` | y |
 
-### FPGA Toolchains
-- Xilinx Vivado (project mode and non-project mode)
-- Intel Quartus Prime
 
 ## Installing
+
+> __Note__: Before installing the targets, it is assumed you are working on a system with [`orbit`](https://github.com/chaseruskin/orbit) already installed.
 
 To apply these configurations to Orbit:
 
