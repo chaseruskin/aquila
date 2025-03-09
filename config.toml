@@ -13,7 +13,7 @@ build = true
 test = true
 command = "python"
 args = ["scripts/msim.py"]
-fileset.do = "{{orbit.bench}}.do"
+fileset.dofi = "{{ orbit.tb.name }}.do"
 
 [[target]]
 name = "xsim"
@@ -40,7 +40,7 @@ build = true
 test = false
 command = "python"
 args = ["scripts/voodoo.py"]
-fileset.xdcf = "*.xdc"
+fileset.xdcf = "{{ orbit.top.name }}.xdc"
 
 [[target]]
 name = "xpro"
