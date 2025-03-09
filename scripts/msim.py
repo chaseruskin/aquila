@@ -49,11 +49,14 @@ class Msim:
         Generate the series of do file commands to implement the requested workflow.
         """
         do = DoFile(self.do_file)
-        self.compile_sources(do)
+        if self.stage == 'comp' or self.stage == 'init' or self.stge == 'sim':
+            self.compile_sources(do)
         if self.stage == 'init' or self.stage == 'sim':
             self.initialize(do)
         if self.stage == 'sim':
             self.simulate(do)
+        if not self.gui:
+            do.push('quit')
         do.save()
 
     def compile_sources(self, do: DoFile):
@@ -97,7 +100,10 @@ class Msim:
         if self.waves_file != None:
             do.push(['source', self.waves_file])
         else:
-            do.push('add wave *')
+            do.push('add wave -expand -group TB '+self.tb_name+'/*')
+            do.push('add wave -expand -group DUT '+self.tb_name+'/dut/*')
+            # toggle leaf names
+            do.push('configure wave -signalnamewidth 1')
 
     def simulate(self, do: DoFile):
         """
@@ -105,8 +111,6 @@ class Msim:
         """
         do.comment('(3) Run simulation')
         do.push('run -all')
-        if not self.gui:
-            do.push('quit')
 
     def run(self):
         """
@@ -118,10 +122,21 @@ class Msim:
         status = Command('vsim') \
             .arg("-batch" if not self.gui else "-gui") \
             .args(['-do', self.do_file]) \
+            .args(['-logfile', self.log_file]) \
             .spawn()
         
-        print('@@@ RUN LOG: \"'+self.log_file+'\" @@@')
+        print('\n@@@ RUN LOG: \"'+self.log_file+'\" @@@\n')
         status.unwrap()
+        # read log file to see if any errors occurred during simulation
+        is_okay = False
+        with open(self.log_file, 'r') as fd:
+            lines = fd.readlines()
+            for line in reversed(lines):
+                if line.startswith('# Errors: '):
+                    is_okay = line.startswith('# Errors: 0')
+                    break
+        if not is_okay:
+            exit(101)
 
 
 def main():
