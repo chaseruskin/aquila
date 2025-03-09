@@ -1,8 +1,6 @@
-# Profile: Hyperspace Labs
-# Module: mod.py
-# 
-# This module contains common low-level functions used across targets written 
-# in Python.
+"""
+Common primitive functionality used across target scripts.
+"""
 
 import os
 from typing import List, Tuple
@@ -11,51 +9,84 @@ import argparse
 import shutil
 import subprocess
 
-class Esc:
-    def __init__(self, inner: str):
-        self._inner = inner
+from abc import ABC, abstractmethod
 
-    def __str__(self):
-        return str(self._inner)
-    pass
+class Target(ABC):
+
+    @abstractmethod
+    def __init__(self):
+        pass
 
 
-class Tcl:
+class TclScript:
+    """
+    Wrapper to help write Tcl scripts in Python.
+    """
+
     def __init__(self, path: str):
+        """
+        Create a new Tcl script destined to be written to `path`.
+        """
         self._file: str = path
         self._data: str = ''
         self._indent: int = 0
+        self._TAB = '    '
         pass
 
-    def push(self, code, end='\n', raw=False):
-        if raw == True:
-            self._data += ('  '*self._indent) + code
-        else:
-            for c in code:
-                self._data += ('  '*self._indent)
-                if isinstance(c, Esc) == True:
-                    self._data += str(c) + ' '
-                else:
-                    self._data += "\"" + str(c) + "\"" + ' '
+    def push(self, tcl='', end='\n'):
+        """
+        A new line of `tcl` code to the current Tcl script.
+        """
+        if isinstance(tcl, str):
+            self._data += (self._TAB*self._indent) + tcl
+        elif isinstance(tcl, list):
+            self._data += (self._TAB*self._indent)
+            for c in tcl:
+                self._data += str(c) + ' '
             pass
+            # remove trailing whitespace
+            if len(tcl) > 0:
+                self._data = self._data[:-1]
+        else:
+            raise ValueError
+        
         self._data += end
         pass
 
+    def comment(self, msg, end='\n'):
+        """
+        Write a comment in the tcl script.
+        """
+        self._data += (self._TAB*self._indent) + '# ' + str(msg)
+        self._data += end
+
     def save(self):
+        """
+        Write the Tcl script contents to a file.
+        """
         with open(self._file, 'w') as f:
             f.write(self._data)
         pass
 
     def indent(self):
+        """
+        Increment the indentation level for readability purposes.
+        """
         self._indent += 1
 
     def dedent(self):
+        """
+        Decrement the indentation level for readability purposes.
+        """
         self._indent -= 1
         if self._indent < 0:
             self._indent = 0
         pass
 
     def get_path(self) -> str:
+        """
+        Return the file system path for this Tcl script.
+        """
         return self._file
     pass
 
@@ -63,7 +94,9 @@ class Tcl:
 class Env:
     @staticmethod
     def quote_str(s: str) -> str:
-        '''Wraps the string `s` around double quotes `\"` characters.'''
+        """
+        Wraps the string `s` around double quotes `\"` characters."
+        """
         return '\"' + s + '\"'
 
     @staticmethod
@@ -119,7 +152,11 @@ class Fileset(Enum):
     pass
 
 
-class Step:
+class Entry:
+    """
+    An `Entry` is a single source item within a blueprint.
+    """
+
     def __init__(self, fset: str, lib: str, path: str):
         self.fset = str(fset).upper()
         self._fset_variant = Fileset.from_str(fset)
@@ -153,18 +190,27 @@ class Step:
 
 
 class Blueprint:
+    """
+    The ordered list of all source entries.
+    """
+
     def __init__(self):
         self._file = Env.read("ORBIT_BLUEPRINT", missing_ok=False)
         pass
 
-    def parse(self) -> List[Step]:
+    def parse(self) -> List[Entry]:
+        """
+        Read the contents of the current target's blueprint.
+
+        Returns the ordered list of entries.
+        """
         rules = []
         # read each line of the blueprint to parse the rules
         with open(self._file, 'r') as blueprint:
             for rule in blueprint.readlines():
                 # remove newline and split into three components
                 fileset, identifier, path = rule.strip().split('\t')
-                rules += [Step(fileset, identifier, path)]
+                rules += [Entry(fileset, identifier, path)]
                 pass
             pass
         return rules
@@ -230,6 +276,8 @@ class Status(Enum):
 class Command:
     def __init__(self, command: str):
         self._command = shutil.which(command)
+        if self._command == None:
+            self._command = command
         self._args = []
 
     def args(self, args: List[str]):
@@ -250,7 +298,11 @@ class Command:
             for c in self._args:
                 command_line += ' ' + Env.quote_str(c)
             print('info:', command_line)
-        child = subprocess.Popen(job)
+        try:
+            child = subprocess.Popen(job)
+        except FileNotFoundError:
+            print('error: command not found: \"'+self._command+'\"')
+            return Status.FAIL
         status = child.wait()
         return Status.from_int(status)
 
