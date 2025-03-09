@@ -21,8 +21,7 @@ TCL_REPORT_CRITPATHS_FN = '''\
 proc report_critical_paths { file_name } {
     # Open the specified output file in write mode
     set fh [open $file_name w]
-    # Write the current date and CSV format to a file header
-    puts $fh "# File created on [clock format [clock seconds]]\\n"
+    # Write the CSV format to a file header
     puts $fh "startpoint,endpoint,delaytype,slack,#levels,#luts"
     # Iterate through both Min and Max delay types
     foreach delayType {max min} {
@@ -93,7 +92,7 @@ class Voodoo(Target):
 
         parser.add_argument('--generic', '-g', action='append', type=Generic.from_arg, default=[], metavar='KEY=VALUE', help='override top-level generics/parameters')
         parser.add_argument('--part', help='specify the targeted fpga device')
-        parser.add_argument('--run', '-r', default='syn', required=True, choices=['syn', 'plc', 'rte', 'bit', 'pgm'], help='select the workflow to execute')
+        parser.add_argument('--run', '-r', default='syn', choices=['syn', 'plc', 'rte', 'bit', 'pgm'], help='select the workflow to execute')
         parser.add_argument('--clock', metavar='PORT=FREQ', help='constrain a input port to be a clock at the specified frequency (MHz)')
         parser.add_argument('--no-bat', action='store_true', help='do not use .bat extension to call vivado')
         args = parser.parse_args()
@@ -126,7 +125,9 @@ class Voodoo(Target):
 
         self.top: str = str(Env.read('ORBIT_TOP_NAME', missing_ok=False))
         self.bit_file: str = str(self.top)+'.bit'
-        self.tcl_path = 'run.tcl'
+
+        self.tcl_path = self.output_path + '/' + 'run.tcl'
+        self.log_path = self.output_path + '/' + 'run.log'
         pass
 
     
@@ -141,10 +142,13 @@ class Voodoo(Target):
         Invoke vivado in batch mode to run the generated tcl script.
         """
         vivado = 'vivado.bat' if self.no_bat == False and os.name == 'nt' else 'vivado'
-        Command(vivado) \
-            .args(['-mode', 'batch', '-nojournal', '-log', 'run.log', '-source', self.tcl_path]) \
-            .spawn() \
-            .unwrap()
+        result = Command(vivado) \
+            .args(['-mode', 'batch', '-nojournal', '-log', self.log_path, '-source', self.tcl_path]) \
+            .spawn()
+        # report to the user where the log can be found
+        print('\n@@@ RUN LOG: \"'+self.log_path+'\" @@@\n')
+        result.unwrap()
+
 
     def write_tclscript(self):
         """
@@ -207,7 +211,7 @@ class Voodoo(Target):
         if self.clock != None:
             clock_xdc = TclScript('clock.xdc')
             name, period = self.clock
-            clock_xdc.push(['create_clock', '-period', period, '-name', name, name])
+            clock_xdc.push(['create_clock', '-add', '-name', name+'_pin', '-period', period, '[get_ports { '+name+' }];'])
             clock_xdc.save()
             clock_xdc_path = self.output_path + '/' + clock_xdc.get_path()
             tcl.push(['read_xdc', '"'+clock_xdc_path+'"'])
@@ -220,7 +224,7 @@ class Voodoo(Target):
         tcl.push()
         tcl.comment('(2) Run synthesis task')
         tcl.push(['synth_design', '-top', self.top, '-part', self.part] + self.tcl_generics)
-        tcl.push('write_check_point -force post_synth.dcp')
+        tcl.push('write_checkpoint -force post_synth.dcp')
         tcl.push('report_timing_summary -file post_synth_timing_summary.rpt')
         tcl.push('report_utilization -file post_synth_util.rpt')
         tcl.comment('Run custom script to report critical timing paths')

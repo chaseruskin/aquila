@@ -268,6 +268,12 @@ class Status(Enum):
             exit(Status.FAIL.value)
         pass
 
+    def is_ok(self) -> bool:
+        return self == Status.OKAY
+
+    def is_err(self) -> bool:
+        return self == Status.FAIL
+    
     def __int__(self):
         return int(self.value)
     pass
