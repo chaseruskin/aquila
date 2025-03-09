@@ -94,8 +94,8 @@ class Voodoo(Target):
         parser.add_argument('--generic', '-g', action='append', type=Generic.from_arg, default=[], metavar='KEY=VALUE', help='override top-level generics/parameters')
         parser.add_argument('--part', help='specify the targeted fpga device')
         parser.add_argument('--run', '-r', default='syn', required=True, choices=['syn', 'plc', 'rte', 'bit', 'pgm'], help='select the workflow to execute')
+        parser.add_argument('--clock', metavar='PORT=FREQ', help='constrain a input port to be a clock at the specified frequency (MHz)')
         parser.add_argument('--no-bat', action='store_true', help='do not use .bat extension to call vivado')
-
         args = parser.parse_args()
 
         # capture all command-line arguments into instance variables
@@ -112,10 +112,27 @@ class Voodoo(Target):
         for g in args.generic:
             self.tcl_generics += ['-generic', str(g)]
             pass
+
+        # capture the additional clock constraint
+        self.clock = None
+        if args.clock != None:
+            port, freq = args.clock.split('=')
+            period = 1.0/((float(freq)*1.0e6))*1.0e9
+            period = round(period, 2)
+            self.clock = (str(port), str(period))
+
+        # set other necessary instance variables
+        self.output_path = Env.read('ORBIT_OUT_DIR')
+
+        self.top: str = str(Env.read('ORBIT_TOP_NAME', missing_ok=False))
+        self.bit_file: str = str(self.top)+'.bit'
+        self.tcl_path = 'run.tcl'
+        pass
+
     
     def read_blueprint(self):
         """
-        Process the blueprint contents
+        Process the blueprint contents.
         """
         self.entries = Blueprint().parse()
 
@@ -133,9 +150,6 @@ class Voodoo(Target):
         """
         Generate the target's tcl script to be used by vivado.
         """
-        self.top: str = str(Env.read('ORBIT_TOP_NAME', missing_ok=False))
-        self.bit_file: str = str(self.top)+'.bit'
-        self.tcl_path = 'run.tcl'
 
         tcl = TclScript(self.tcl_path)
         
@@ -188,6 +202,15 @@ class Voodoo(Target):
             if entry.is_aux('XDCF'):
                 tcl.push(['read_xdc', '"'+entry.path+'"'])
                 pass
+
+        # create a clock constraint xdc
+        if self.clock != None:
+            clock_xdc = TclScript('clock.xdc')
+            name, period = self.clock
+            clock_xdc.push(['create_clock', '-period', period, '-name', name, name])
+            clock_xdc.save()
+            clock_xdc_path = self.output_path + '/' + clock_xdc.get_path()
+            tcl.push(['read_xdc', '"'+clock_xdc_path+'"'])
             pass
 
     def synthesize(self, tcl: TclScript):
@@ -227,7 +250,7 @@ class Voodoo(Target):
 
     def route(self, tcl: TclScript):
         """
-        Generate tcl commands for performing routing
+        Generate tcl commands for performing routing.
         """
         tcl.push()
         tcl.comment('(4) Run routing for the design')
@@ -241,7 +264,7 @@ class Voodoo(Target):
 
     def bitstream(self, tcl: TclScript):
         """
-        Generate the tcl commands to write the bitstream
+        Generate the tcl commands to write the bitstream.
         """
         tcl.push()
         tcl.comment('(5) Generate the bitstream')
@@ -249,7 +272,7 @@ class Voodoo(Target):
 
     def program(self, tcl: TclScript):
         """
-        Generate the tcl commands to program the bitstream to a board
+        Generate the tcl commands to program the bitstream to a board.
         """
         tcl.push()
         tcl.comment('(6) Program the connected FPGA device')
