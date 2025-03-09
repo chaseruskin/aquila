@@ -1,134 +1,134 @@
-# Profile: Hyperspace Labs
-# Target: msim
+# Runs ModelSim workflows for HDL simulations.
+#
 # Reference: https://www.microsemi.com/document-portal/doc_view/131617-modelsim-reference-manual
-# 
-# Runs ModelSim in batch mode to perform HDL simulations.
 
-from mod import Env, Generic, Command, Blueprint, Step
+from mod import Env, Generic, Command, Blueprint, DoFile
 from typing import List
-import os
 import argparse
 
+
+class Msim:
+
+    def __init__(self):
+        """
+        Create a new instance of the `msim` target.
+        """
+        parser = argparse.ArgumentParser(prog='msim', allow_abbrev=False)
+
+        parser.add_argument('--run', '-r', default='sim', choices=['comp', 'init', 'sim'], help='specify the workflow to execute')
+        parser.add_argument('--gui', action='store_true', help='open the interactive gui')
+        parser.add_argument('--generic', '-g', action='append', type=Generic.from_arg, default=[], metavar='KEY=VALUE', help='override top-level VHDL generics')
+        parser.add_argument('--top-config', default=None, help='define the top-level configuration unit')
+
+        args = parser.parse_args()
+
+        # capture arguments into instance variables
+        self.top_config = args.top_config
+        self.gui = bool(args.gui)
+        self.stage = str(args.run)
+        self.generics: List[Generic] = args.generic
+
+        # additional instance variables
+        self.entries = []
+        self.working_lib = None
+        self.waves_file = None
+
+        self.tb_name = Env.read('ORBIT_TB_NAME')
+        self.dut_name = Env.read('ORBIT_DUT_NAME')
+
+        self.out_dir = Env.read('ORBIT_OUT_DIR')
+        self.do_file = self.out_dir + '/' + 'run.do'
+        self.log_file = self.out_dir + '/' + 'run.log'
+        self.wlf_file = self.out_dir + '/' + str(self.tb_name) + '.wlf'
+
+    def read_blueprint(self):
+        self.entries = Blueprint().parse()
+
+    def write_dofile(self):
+        """
+        Generate the series of do file commands to implement the requested workflow.
+        """
+        do = DoFile(self.do_file)
+        self.compile_sources(do)
+        if self.stage == 'init' or self.stage == 'sim':
+            self.initialize(do)
+        if self.stage == 'sim':
+            self.simulate(do)
+        do.save()
+
+    def compile_sources(self, do: DoFile):
+        """
+        Adds commands to compile the source code.
+        """
+        libs = []
+        do.comment("(1) Compile source files")
+        for entry in self.entries:
+            if entry.lib not in libs:
+                do.push(['vlib', entry.lib])
+                do.push(['vmap', entry.lib, entry.lib])
+                libs += [entry.lib]
+            # write command based on fileset
+            if entry.is_vhdl():
+                do.push(['vcom', '-work', entry.lib, '"'+entry.path+'"'])
+            elif entry.is_vlog():
+                do.push(['vlog', '-work', entry.lib, '"'+entry.path+'"'])
+            elif entry.is_sysv():
+                do.push(['vlog', '-sv', '-work', entry.lib, '"'+entry.path+'"'])
+            elif entry.is_aux('DOFI'):
+                self.waves_file = entry.path
+            # capture latest file to be compiled as the one with working lib
+            self.working_lib = entry.lib
+
+    def initialize(self, do: DoFile):
+        """
+        Adds commands to initialize the simulation with vsim.
+        """
+        do.comment('Initialize simulation')
+        top = self.tb_name if self.top_config == None else self.top_config
+        vsim_args = [
+            '-onfinish', 'stop', '-wlf', self.wlf_file,
+            '+nowarn3116',
+            '-work', self.working_lib, 
+            self.working_lib+'.'+top
+        ]
+        gen_args = ['-g' + g.to_str() for g in self.generics]
+        do.push(['eval', 'vsim'] + vsim_args + gen_args)
+        # load waves if exist
+        if self.waves_file != None:
+            do.push(['source', self.waves_file])
+        else:
+            do.push('add wave *')
+
+    def simulate(self, do: DoFile):
+        """
+        Adds commands to simulate the design with vsim.
+        """
+        do.comment('(3) Run simulation')
+        do.push('run -all')
+        if not self.gui:
+            do.push('quit')
+
+    def run(self):
+        """
+        Invoke modelsim to run the generated do file workflow.
+        """
+        # append modelsim installation path to PATH env variable
+        Env.add_path(Env.read("ORBIT_ENV_MODELSIM_PATH", missing_ok=True))
+        # reference: https://stackoverflow.com/questions/57392389/what-is-vsim-command-line
+        status = Command('vsim') \
+            .arg("-batch" if not self.gui else "-gui") \
+            .args(['-do', self.do_file]) \
+            .spawn()
+        
+        print('@@@ RUN LOG: \"'+self.log_file+'\" @@@')
+        status.unwrap()
+
+
 def main():
-    # append modelsim installation path to PATH env variable
-    Env.add_path(Env.read("ORBIT_ENV_MODELSIM_PATH", missing_ok=True))
-
-    # handle command-line arguments
-    parser = argparse.ArgumentParser(prog='msim', allow_abbrev=False)
-
-    parser.add_argument('--lint', action='store_true', default=False, help='run static code analysis and exit')
-    parser.add_argument('--stop-at-sim', action='store', help='stop after setting up the simulation')
-    parser.add_argument('--gui', action='store_true', default=False, help='open the gui')
-    parser.add_argument('--generic', '-g', action='append', type=Generic.from_arg, default=[], metavar='KEY=VALUE', help='override top-level VHDL generics')
-    parser.add_argument('--top-config', default=None, help='define the top-level configuration unit')
-
-    args = parser.parse_args()
-
-    # set up environment and constants
-    TB_NAME = Env.read("ORBIT_TB_NAME", missing_ok=True)
-
-    DO_FILE = 'orbit.do'
-    WAVEFORM_FILE = 'vsim.wlf'
-
-    # testbench's VHDL configuration unit
-    TOP_LEVEL_CONFIG = args.top_config
-
-    OPEN_GUI = bool(args.gui)
-    STOP_AT_SIM = bool(args.stop_at_sim)
-    LINT_ONLY = bool(args.lint)
-
-    GENERICS: List[Generic] = args.generic
-
-
-    tb_do_file: str = None
-    compile_order: List[Step] = []
-
-    step: Step
-
-    # process blueprint
-    for step in Blueprint().parse():
-        if step.is_builtin() == True:
-            compile_order += [step]
-        if step.is_aux('DO'):
-            tb_do_file = step.path
-            pass
-        pass
-
-    print("info: compiling HDL source code ...")
-    libraries = []
-    work_lib = 'work'
-    # compile hdl source code
-    for step in compile_order:
-        print('  ->', Env.quote_str(step.path))
-        # create new libraries and their mappings
-        if step.lib not in libraries:
-            Command('vlib').arg(step.lib).spawn().unwrap()
-            Command('vmap').arg(step.lib).arg(step.lib).spawn().unwrap()
-            libraries.append(step.lib)
-        # compile source code
-        if step.is_vhdl():
-            Command('vcom').arg('-work').arg(step.lib).arg(step.path).spawn().unwrap()
-        elif step.is_vlog():
-            Command('vlog').arg('-work').arg(step.lib).arg(step.path).spawn().unwrap()
-        elif step.is_sysv():
-            Command('vlog').arg('-sv').arg('-work').arg(step.lib).arg(step.path).spawn().unwrap()
-        # the last file to write the library is the working library
-        work_lib = step.lib
-        pass
-
-    if LINT_ONLY == True:
-        print("info: static analysis complete")
-        exit(0)
-
-    # prepare the simulation
-    if TB_NAME is None:
-        print('error: cannot proceed any further without a testbench\n\nhint: stop here using \"--lint\" to exit safely or set a testbench to run a simulation')
-        exit(101)
-
-    # create a .do file to automate modelsim actions
-    print("info: generating .do file ...")
-    with open(DO_FILE, 'w') as file:
-        # prepend .do file data
-        if OPEN_GUI == True:
-            # add custom waveform/vsim commands
-            if tb_do_file != None and os.path.exists(tb_do_file) == True:
-                print("info: importing commands from .do file:", tb_do_file)
-                with open(tb_do_file, 'r') as do:
-                    for line in do.readlines():
-                        # add all non-blank lines
-                        if len(line.strip()) > 0:
-                            file.write(line)
-                    pass
-            # write default to include all signals into waveform
-            else:
-                file.write('add wave *\n')
-                pass
-        if STOP_AT_SIM == False:
-            file.write('run -all\n')
-        if OPEN_GUI == False:
-            file.write('quit\n')
-        pass
-
-    # determine to run as script or as gui
-    mode = "-batch" if OPEN_GUI == False else "-gui"
-
-    # override bench with top-level config
-    TB_NAME = str(TOP_LEVEL_CONFIG) if TOP_LEVEL_CONFIG != None else str(TB_NAME)
-
-    # reference: https://stackoverflow.com/questions/57392389/what-is-vsim-command-line
-    print("info: starting simulation for testbench", Env.quote_str(TB_NAME), "...")
-    Command('vsim') \
-        .arg(mode) \
-        .arg('-onfinish').arg('stop') \
-        .arg('-do').arg(DO_FILE) \
-        .arg('-wlf').arg(WAVEFORM_FILE) \
-        .arg('-work').arg(work_lib) \
-        .arg('+nowarn3116') \
-        .arg(TB_NAME) \
-        .args(['-g' + item.to_str() for item in GENERICS]) \
-        .spawn() \
-        .unwrap()
-    pass
+    msim = Msim()
+    msim.read_blueprint()
+    msim.write_dofile()
+    msim.run()
 
 
 if __name__ == '__main__':
