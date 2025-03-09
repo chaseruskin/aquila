@@ -86,7 +86,7 @@ class Msim:
         """
         Adds commands to initialize the simulation with vsim.
         """
-        do.comment('Initialize simulation')
+        do.comment('(2) Initialize simulation')
         top = self.tb_name if self.top_config == None else self.top_config
         vsim_args = [
             '-onfinish', 'stop', '-wlf', self.wlf_file,
