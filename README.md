@@ -33,7 +33,7 @@ git clone https://github.com/chaseruskin/orbit-targets.git "$(orbit env ORBIT_HO
 pip install -r "$(orbit env ORBIT_HOME)/targets/chaseruskin/requirements.txt"
 ```
 
-1. Include the configuration file using `orbit`:
+3. Include the configuration file using `orbit`:
 
 ```
 orbit config --push include="targets/chaseruskin/config.toml"
