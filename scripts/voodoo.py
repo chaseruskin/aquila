@@ -94,13 +94,10 @@ class Voodoo:
         parser.add_argument('--part', help='specify the targeted fpga device')
         parser.add_argument('--run', '-r', default='syn', choices=['syn', 'plc', 'rte', 'bit', 'pgm'], help='select the workflow to execute')
         parser.add_argument('--clock', '-c', metavar='NAME=FREQ', help='constrain a pin as a clock at the set frequency (MHz)')
-        parser.add_argument('--no-bat', action='store_true', help='do not use .bat extension to call vivado')
         args = parser.parse_args()
 
         # capture all command-line arguments into instance variables
-        self.no_bat = bool(args.no_bat)
         self.proc = Step.from_str(args.run)
-
         self.part = 'xc7s25-csga324'
         if args.part == None:
             print('info: using default part "'+self.part+'" since no part was selected')
@@ -142,8 +139,7 @@ class Voodoo:
         """
         Invoke vivado in batch mode to run the generated tcl script.
         """
-        vivado = 'vivado.bat' if self.no_bat == False and os.name == 'nt' else 'vivado'
-        result = Command(vivado) \
+        result = Command('vivado') \
             .args(['-mode', 'batch', '-nojournal', '-log', self.log_path, '-source', self.tcl_path]) \
             .spawn()
         # report to the user where the log can be found
