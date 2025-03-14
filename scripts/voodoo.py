@@ -15,7 +15,7 @@ from enum import Enum
 import os
 
 
-TCL_REPORT_CRITPATHS_FN = '''\
+TCL_PROC_REPORT_CRITPATHS = '''\
 # Generate a CSV file that provides a summary of the first 50 violations for
 # both setup and hold analysis (maximum of 100 paths are reported).
 proc report_critical_paths { file_name } {
@@ -173,7 +173,7 @@ class Voodoo:
         """
         Generate any tcl that is required later in the script.
         """
-        tcl.push(TCL_REPORT_CRITPATHS_FN)
+        tcl.push(TCL_PROC_REPORT_CRITPATHS)
         tcl.comment('Disable webtalk')
         tcl.push('config_webtalk -user off')
 
@@ -199,7 +199,7 @@ class Voodoo:
         if self.clock != None:
             clock_xdc = TclScript('clock.xdc')
             name, period = self.clock
-            clock_xdc.push(['create_clock', '-add', '-name', name+'_pin', '-period', period, '[get_ports { '+name+' }];'])
+            clock_xdc.push(['create_clock', '-add', '-name', name, '-period', period, '[get_ports { '+name+' }];'])
             clock_xdc.save()
             clock_xdc_path = self.output_path + '/' + clock_xdc.get_path()
             tcl.push(['read_xdc', '"'+clock_xdc_path+'"'])
