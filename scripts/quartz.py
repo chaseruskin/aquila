@@ -74,10 +74,10 @@ class Quartz:
 
         self.proc = Step.from_str(args.run)
         self.part = '10M50DAF484C7G'
-        if args.part == None:
+        if args.device == None:
             print('info: using default part "'+self.part+'" since no part was selected')
         else:
-            self.part = args.part
+            self.part = args.device
 
         self.generics: list[Generic] = args.generics
 
