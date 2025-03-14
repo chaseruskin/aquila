@@ -37,10 +37,9 @@ class Step(Enum):
     Enumeration of the possible workflows to run using quartus.
     """
     Syn = 0
-    Plc = 1
-    Rte = 2
-    Bit = 3
-    Pgm = 4
+    Pnr = 1
+    Bit = 2
+    Pgm = 3
     
     @staticmethod
     def from_str(s: str):
@@ -48,13 +47,11 @@ class Step(Enum):
         Convert a `str` datatype into a `Step`.
         """
         s = str(s).lower()
-        if s == 'syn':
+        if s == 'map':
             return Step.Syn
-        if s == 'plc':
-            return Step.Plc
-        if s == 'rte':
-            return Step.Rte
-        if s == 'bit':
+        if s == 'fit':
+            return Step.Pnr
+        if s == 'asm':
             return Step.Bit
         if s == 'pgm':
             return Step.Pgm
@@ -68,7 +65,7 @@ class Quartz:
         Create a new instance of the quartus workflow.
         """
         parser = argparse.ArgumentParser(prog='quartz', allow_abbrev=False)
-        parser.add_argument('--run, -r', default='map', choices=['map', 'fit', 'asm', 'pgm'])
+        parser.add_argument('--run', '-r', default='map', choices=['map', 'fit', 'asm', 'pgm'])
         parser.add_argument("--device", action="store", default=None, type=str, help="set the targeted fpga device")
         parser.add_argument('--store', default='sram', choices=['flash', 'sram'], help='specify where to program the bitstream')
         parser.add_argument('--generic', '-g', action='append', type=Generic.from_arg, default=[], metavar='key=value', help='override top-level VHDL generics')
