@@ -8,7 +8,7 @@
 # References:
 #   https://github.com/ghdl/ghdl
 
-from mod import Command, Status, Env, Generic, Blueprint, Step
+from mod import Command, Status, Env, Generic, Blueprint, Entry
 import argparse
 from typing import List
 
@@ -46,7 +46,7 @@ def main():
         GHDL_OPTS += ['-frelaxed']
 
     # read blueprint
-    compile_order: List[Step] = []
+    compile_order: List[Entry] = []
     for rule in Blueprint().parse():
         if rule.is_vhdl():
             compile_order += [rule]
@@ -54,7 +54,7 @@ def main():
 
     # analyze units
     print("info: analyzing hdl source code ...")
-    item: Step
+    item: Entry
     for item in compile_order:
         print('  ->', Env.quote_str(item.path))
         Command('ghdl') \
