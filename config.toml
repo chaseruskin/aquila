@@ -4,7 +4,7 @@ description = "GHDL general-purpose simulations"
 build = true
 test = true
 command = "python"
-args = ["scripts/gsim.py"]
+args = ["targets/gsim.py"]
 
 [[target]]
 name = "msim"
@@ -12,7 +12,7 @@ description = "ModelSim general-purpose simulations"
 build = true
 test = true
 command = "python"
-args = ["scripts/msim.py"]
+args = ["targets/msim.py"]
 fileset.dofi = "{{ orbit.tb.name }}.do"
 
 [[target]]
@@ -21,7 +21,7 @@ description = "Vivado Simulator general-purpose simulations"
 build = true
 test = true
 command = "python"
-args = ["scripts/xsim.py"]
+args = ["targets/xsim.py"]
 
 [[target]]
 name = "quartz"
@@ -29,7 +29,7 @@ description = "Intel Quartus Prime toolflow"
 build = true
 test = false
 command = "python"
-args = ["scripts/quartz.py"]
+args = ["targets/quartz.py"]
 fileset.board = "*.board.toml"
 fileset.bdf = "*.bdf"
 
@@ -39,7 +39,7 @@ description = "Xilinx Vivado non-project mode toolflow"
 build = true
 test = false
 command = "python"
-args = ["scripts/voodoo.py"]
+args = ["targets/voodoo.py"]
 fileset.xdcf = "{{ orbit.top.name }}.xdc"
 
 [[target]]
@@ -48,5 +48,5 @@ description = "Xilinx Vivado project mode toolflow"
 build = true
 test = false
 command = "python"
-args = ["scripts/xpro.py"]
+args = ["targets/xpro.py"]
 fileset.xdcf = "*.xdc"
