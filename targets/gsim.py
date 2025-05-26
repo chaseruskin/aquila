@@ -47,9 +47,9 @@ def main():
 
     # read blueprint
     compile_order: List[Entry] = []
-    for rule in Blueprint().parse():
-        if rule.is_vhdl():
-            compile_order += [rule]
+    for entry in Blueprint().get_entries():
+        if entry.is_vhdl():
+            compile_order += [entry]
         pass
 
     # analyze units

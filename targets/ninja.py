@@ -72,7 +72,7 @@ class Ninja:
         data += '# It is not intended for manual editing.\n\n'
 
         def fmt_file_list(files: list):
-            result = ' '
+            result = ''
             for f in files:
                 # escape spaces in file paths
                 result += f.replace(' ', '$ ') + ' '
@@ -93,7 +93,7 @@ class Ninja:
             sorted_rules.sort()
             for name in sorted_rules:
                 data += 'rule ' + name + '\n  '
-                data += self.rules[name] + '\n\n'
+                data += 'command = ' + self.rules[name] + '\n\n'
         # add builds
         if len(self.builds) > 0:
             data += '# Builds\n'
