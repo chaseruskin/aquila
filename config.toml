@@ -1,52 +1,52 @@
 [[target]]
-name = "gsim"
+name = "gee"
 description = "GHDL general-purpose simulations"
+command = ["python", "targets/gsim.py"]
 build = true
 test = true
-command = "python"
-args = ["targets/gsim.py"]
 
 [[target]]
-name = "msim"
+name = "mojo"
 description = "ModelSim general-purpose simulations"
+command = ["python", "targets/msim.py"]
 build = true
 test = true
-command = "python"
-args = ["targets/msim.py"]
 fileset.dofi = "{{ orbit.tb.name }}.do"
 
 [[target]]
-name = "xsim"
+name = "visi"
 description = "Vivado Simulator general-purpose simulations"
+command = ["python", "targets/xsim.py"]
 build = true
 test = true
-command = "python"
-args = ["targets/xsim.py"]
 
 [[target]]
 name = "quartz"
 description = "Intel Quartus Prime toolflow"
+command = ["python", "targets/quartz.py"]
 build = true
 test = false
-command = "python"
-args = ["targets/quartz.py"]
 fileset.board = "*.board.toml"
 fileset.bdf = "*.bdf"
 
 [[target]]
 name = "voodoo"
 description = "Xilinx Vivado non-project mode toolflow"
+command = ["python", "targets/voodoo.py"]
 build = true
 test = false
-command = "python"
-args = ["targets/voodoo.py"]
 fileset.xdcf = "{{ orbit.top.name }}.xdc"
 
 [[target]]
 name = "xpro"
 description = "Xilinx Vivado project mode toolflow"
+command = ["python", "targets/xpro.py"]
 build = true
 test = false
-command = "python"
-args = ["targets/xpro.py"]
 fileset.xdcf = "*.xdc"
+
+[[protocol]]
+name = "git"
+description = "Download ip using git"
+command = ["git", "clone", "{{ orbit.ip.source }}", "-b", "{{ orbit.ip.version }}"]
+patterns = ["*.git"]

@@ -1,48 +1,48 @@
-# Orbit Targets
+# Constellation
 
-A collection of scripts implementing processes and workflows to use as
-[Orbit](https://github.com/chaseruskin/orbit) targets for FPGA development.
+A collection of related settings and processes for FPGA development with
+[Orbit](https://github.com/chaseruskin/orbit), a package manager and build system for VHDL, Verilog, and SystemVerilog.
 
-## Available Tools
+All settings are configured in [`config.toml`](config.toml). This is the file that must be recognized by Orbit for these settings to go into effect. 
 
-The following simulators/toolchains are supported:
-
-Tool | Target(s) | Build | Test
--- | -- | -- | -- 
-GHDL | `gsim` | y | y
-ModelSim | `msim` | y | y
-Vivado Simulator | `xsim` | y | y
-Vivado | `voodoo`, `xpro` | y |
-Quartus | `quartz` | y |
-
-
-## Installing
-
-> __Note__: Before installing the targets, it is assumed you are working on a system with [`orbit`](https://github.com/chaseruskin/orbit) already installed.
-
-To apply these configurations to Orbit:
+### Installing
 
 1. Clone this repository using `git`:
-
 ```
-git clone https://github.com/chaseruskin/orbit-targets.git "$(orbit env ORBIT_HOME)/targets/chaseruskin"
+git clone https://github.com/chaseruskin/constellation.git "$(orbit env ORBIT_HOME)/ext/constellation"
 ```
 
 2. Install the required Python packages using `pip`:
 ```
-pip install -r "$(orbit env ORBIT_HOME)/targets/chaseruskin/requirements.txt"
+pip install -r "$(orbit env ORBIT_HOME)/ext/constellation/requirements.txt"
 ```
 
 3. Include the configuration file using `orbit`:
-
 ```
-orbit config --push include="targets/chaseruskin/config.toml"
+orbit config --push include="ext/constellation/config.toml"
 ```
 
-## Updating
 
-To receive the latest changes:
+## Targets
 
-```
-git -C "$(orbit env ORBIT_HOME)/targets/chaseruskin" pull
-```
+Targets define processes for producing build artifacts to be invoked during the execution stage of Orbit's build process.
+
+The following simulators/toolchains are supported:
+
+Tool | Target(s) | Build | Test | Dependencies
+-- | -- | -- | -- | --
+GHDL | `gee` | y | y | python
+ModelSim | `mojo` | y | y | python, ninja
+Vivado Simulator | `visi` | y | y | python
+Vivado | `voodoo`, `xpro` | y | | python
+Quartus | `quartz` | y | | python
+
+## Protocols
+
+Protocols define processes for downloading an ip from the internet to be invoked during the download phase of Orbit's installation process.
+
+The following protocols are supported:
+
+Tool | Protocol(s) | Patterns | Dependencies
+-- | -- | -- | --
+git | `git` | `*.git`
