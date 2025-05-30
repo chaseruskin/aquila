@@ -61,13 +61,8 @@ class Msim:
         self.tb_name = Env.read('ORBIT_TB_NAME')
         self.dut_name = Env.read('ORBIT_DUT_NAME')
 
-        # try to set a license for ModelSim
-        license_file = Env.read('ORBIT_ENV_LM_LICENSE_FILE')
-        if license_file != None:
-            Env.write('LM_LICENSE_FILE', license_file)
-
         # append modelsim installation path to PATH env variable
-        Env.add_path(Env.read("ORBIT_ENV_MODELSIM_PATH", missing_ok=True))
+        Env.add_path(Env.read("MODELSIM_PATH", missing_ok=True))
 
         self.out_dir = Env.read('ORBIT_OUT_DIR')
         self.cmp_log = self.out_dir + '/' + 'compile.log'
@@ -168,8 +163,8 @@ class Msim:
             if wave_file != None:
                 do.push(['source', wave_file])
             else:
-                do.push('add wave -group TB -expand '+self.tb_name+'/*')
-                do.push('add wave -group DUT -expand '+self.tb_name+'/dut/*')
+                do.push('add wave -group tb -expand '+self.tb_name+'/*')
+                do.push('add wave -group dut -expand '+self.tb_name+'/dut/*')
                 # toggle leaf names
                 do.push('configure wave -signalnamewidth 1')
 

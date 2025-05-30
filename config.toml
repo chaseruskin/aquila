@@ -8,7 +8,7 @@ test = true
 [[target]]
 name = "mojo"
 description = "ModelSim general-purpose simulations"
-command = ["python", "targets/msim.py"]
+command = ["python", "targets/mojo.py"]
 build = true
 test = true
 fileset.dofi = "{{ orbit.tb.name }}.do"

@@ -130,7 +130,7 @@ class Env:
 
     @staticmethod
     def add_path(path: str) -> bool:
-        if path is not None and os.path.exists(path) and path not in os.getenv("PATH"):
+        if path is not None and os.path.exists(path) and len(path) > 0 and path not in os.getenv("PATH"):
             os.environ["PATH"] += os.pathsep + path
             return True
         return False
