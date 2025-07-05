@@ -29,7 +29,7 @@ def main():
 
     # set up environment and constants
     TB_NAME = Env.read("ORBIT_TB_NAME", missing_ok=True)
-    LIBRARY: str = Env.read("ORBIT_IP_LIBRARY", missing_ok=False)
+    LIBRARY: str = Env.read("ORBIT_PROJECT_LIBRARY", missing_ok=False)
 
     IS_RELAXED = bool(args.relax)
     GENERICS: List[Generic] = args.generic

@@ -93,7 +93,7 @@ class Quartz:
 
         self.top: str = str(Env.read('ORBIT_TOP_NAME', missing_ok=False))
         
-        self.proj: str = str(Env.read('ORBIT_IP_NAME'))
+        self.proj: str = str(Env.read('ORBIT_PROJECT_NAME'))
 
         self.sram_bitfile = str(self.top)+'.sof'
         self.flash_bitfile = str(self.top)+'.pof'

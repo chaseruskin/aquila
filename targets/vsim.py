@@ -11,7 +11,7 @@ from mod import Command, Env, Generic, Blueprint, Hdl
 
 # set up environment and constants
 BENCH = Env.read("ORBIT_TB_NAME", missing_ok=True)
-LIBRARY: str = Env.read("ORBIT_IP_LIBRARY", missing_ok=False)
+LIBRARY: str = Env.read("ORBIT_PROJECT_LIBRARY", missing_ok=False)
 
 # handle command-line arguments
 parser = argparse.ArgumentParser(prog='vsim', allow_abbrev=False)

@@ -34,7 +34,7 @@ def main():
 
     # convert environment variables to script constants
     TOP = Env.read('ORBIT_TOP_NAME', missing_ok=True)
-    IP_NAME: str = str(Env.read('ORBIT_IP_NAME', missing_ok=False))
+    IP_NAME: str = str(Env.read('ORBIT_PROJECT_NAME', missing_ok=False))
     BLUEPRINT_FILE: str = str(Env.read('ORBIT_BLUEPRINT', missing_ok=False))
     XPR_FILE: str = str(IP_NAME) + '.xpr'
 

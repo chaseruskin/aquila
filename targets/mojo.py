@@ -55,7 +55,7 @@ class Msim:
 
         # additional instance variables
         self.entries = Blueprint().get_entries()
-        self.work_lib = Env.read('ORBIT_IP_LIBRARY')
+        self.work_lib = Env.read('ORBIT_PROJECT_LIBRARY')
         self.libs = set()
 
         self.tb_name = Env.read('ORBIT_TB_NAME')
