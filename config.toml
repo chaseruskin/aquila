@@ -47,6 +47,6 @@ fileset.xdcf = "*.xdc"
 
 [[protocol]]
 name = "git"
-description = "Download ip using git"
-command = ["git", "clone", "{{ orbit.ip.source }}", "-b", "{{ orbit.ip.version }}"]
+description = "Download project using git"
+command = ["git", "clone", "{{ orbit.project.source }}", "-b", "{{ orbit.project.version }}"]
 patterns = ["*.git"]
