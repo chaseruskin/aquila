@@ -1,9 +1,11 @@
 # Aquila
 
+> __Aquila__ is a constellation on the celestial equator, which represents the bird that carried Zeus/Jupiter's thunderbolts in Greek-Roman mythology.
+
 A collection of settings and processes for FPGA development with
 [Orbit](https://github.com/chaseruskin/orbit), a package manager and build system for VHDL, Verilog, and SystemVerilog.
 
-All settings are configured in [`config.toml`](config.toml). This is the file that must be recognized by Orbit for these settings to go into effect.
+All settings are configured in [`config.toml`](aquila/config.toml). This is the file that must be recognized by Orbit for these settings to go into effect.
 
 ### Installing
 
@@ -19,10 +21,11 @@ orbit config --push include="$(aquila-config --config-path)"
 
 ### Importing
 
-Aquila is distributed as an installable Python package such it can be leveraged in additional Orbit configurations outside of this project.
+Although not necessary, Aquila is distributed as an installable Python package such that it can be leveraged in future Orbit configurations that may exist outside of this project.
 
 After Aquila is installed, you can import the `aquila` package into your own Python modules:
 ``` py
+import aquila
 from aquila import ninja
 
 nj = ninja.Ninja()
