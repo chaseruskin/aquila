@@ -21,7 +21,7 @@ def main():
 
     parser.add_argument('--lint', action='store_true', default=False, help='run static analysis and exit')
     parser.add_argument('--generic', '-g', action='append', type=Generic.from_arg, default=[], metavar='KEY=VALUE', help='override top-level VHDL generics')
-    parser.add_argument('--std', action='store', default='93', metavar='EDITION', help="specify the VHDL edition (87, 93, 02, 08, 19)")
+    parser.add_argument('--std', action='store', default='08', metavar='EDITION', help="specify the VHDL edition (87, 93, 02, 08, 19)")
     parser.add_argument('--relax', action='store_true', help='enable relaxed semantic rules for ghdl')
     parser.add_argument('--exit-on', action='store', default='error', metavar='LEVEL', help='select severity level to exit on (default: error)')
 

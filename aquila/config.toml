@@ -1,0 +1,56 @@
+[[protocol]]
+name = "git"
+description = "Download projects using git"
+command = ["git", "clone", "{{ orbit.project.source }}", "-b", "{{ orbit.project.version }}"]
+patterns = ["*.git"]
+
+[[target]]
+name = "goku"
+description = "Run simulations with GHDL"
+command = ["python3", "gsim.py"]
+test = true
+build = false
+
+[[target]]
+name = "vi"
+description = "Run FPGA workflows with Vivado"
+command = ["python3", "voodoo.py"]
+test = false
+build = true
+fileset.xdcf = "{{ orbit.top.name }}.xdc"
+
+[[target]]
+name = "mojo"
+description = "Run simulations with ModelSim"
+command = ["python3", "mojo.py"]
+test = true
+build = false
+fileset.dofi = "{{ orbit.tb.name }}.do"
+
+
+# Below are unused... need refactoring
+
+[[target]]
+name = "visi"
+description = "Vivado Simulator general-purpose simulations"
+command = ["python3", "xsim.py"]
+build = true
+test = true
+
+[[target]]
+name = "quartz"
+description = "Intel Quartus Prime toolflow"
+command = ["python3", "quartz.py"]
+build = true
+test = false
+fileset.board = "*.board.toml"
+fileset.bdf = "*.bdf"
+
+[[target]]
+name = "xpro"
+description = "Xilinx Vivado project mode toolflow"
+command = ["python3", "xpro.py"]
+build = true
+test = false
+fileset.xdcf = "*.xdc"
+

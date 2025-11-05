@@ -1,0 +1,25 @@
+[project]
+name = "aquila"
+version = "0.1.0"
+authors = [{ name="Chase Ruskin" }]
+description = "Orbit configurations for FPGA development"
+requires-python = ">=3.6.8"
+dependencies = [
+    "toml==0.10.2",
+]
+
+[project.scripts]
+aquila-config = "aquila.config:main"
+
+[project.urls]
+Homepage = "https://github.com/chaseruskin/aquila"
+
+[tool.setuptools.package-dir]
+aquila = "aquila"
+
+[tool.setuptools.package-data]
+aquila = ["config.toml"]
+
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
