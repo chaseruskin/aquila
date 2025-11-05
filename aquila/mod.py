@@ -1,6 +1,6 @@
-"""
+'''
 Common primitive functionality used across target scripts.
-"""
+'''
 
 import os
 from typing import List, Tuple
@@ -134,7 +134,22 @@ class Env:
             os.environ["PATH"] += os.pathsep + path
             return True
         return False
-    pass
+    
+    @staticmethod
+    def prepend(key, value: str):
+        if value is not None and os.path.exists(value) and len(value) > 0 and (os.getenv(key) is None or value not in os.getenv(key)):
+            if os.getenv(key) is None:
+                os.environ[key] = value + os.pathsep
+            else:
+                os.environ[key] = value + os.pathsep + os.environ[key]
+
+    @staticmethod
+    def append(key, value: str):
+        if value is not None and os.path.exists(value) and len(value) > 0 and (os.getenv(key) is None or value not in os.getenv(key)):
+            if os.getenv(key) is None:
+                os.environ[key] = value
+            else:
+                os.environ[key] += os.pathsep + value
 
 
 class Entry:
@@ -326,6 +341,34 @@ class Command:
             return Status.FAIL
         status = child.wait()
         return Status.from_int(status)
+    
+    def stream(self, path: str, mode: str='w') -> Status:
+        '''
+        Writes the stdout and stderr to the terminal while also recording it to a file.
+        '''
+        import re
+        def execute(cmd):
+            popen = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+            for stdout_line in iter(popen.stdout.readline, ""):
+                yield stdout_line
+            popen.stdout.close()
+            return_code = popen.wait()
+            if return_code:
+                raise subprocess.CalledProcessError(return_code, cmd)
+        
+        job = [self._command] + self._args
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        fd = open(path, mode)
+        try:
+            for line in execute(job):
+                print(line, end='')
+                data = ansi_escape.sub('', line)
+                fd.write(data)
+        except subprocess.CalledProcessError:
+            fd.close()
+            return Status.FAIL
+        fd.close()
+        return Status.OKAY
 
     def output(self, verbose: bool=False) -> Tuple[str, Status]:
         job = [self._command] + self._args
