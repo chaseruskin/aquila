@@ -1,3 +1,7 @@
+'''
+Reports package configurations.
+'''
+
 import argparse
 import sys
 import os

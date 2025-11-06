@@ -1,3 +1,7 @@
+'''
+Backend target process for simulations with ModelSim.
+'''
+
 # Runs ModelSim workflows for HDL simulations.
 #
 # References: 
@@ -6,14 +10,20 @@
 # - https://stackoverflow.com/questions/57392389/what-is-vsim-command-line
 # - https://wikis.ece.iastate.edu/cpre584/images/3/3c/Modelsim_pe_user_10.0d.pdf
 
-from mod import Env, Generic, Command, Blueprint, DoFile
-from ninja import Ninja
-
 from typing import List
 from enum import Enum
 import argparse
 import os
 import hashlib
+import sys
+
+from aquila.env import KvPair
+from aquila import log
+from aquila import env
+from aquila.process import Command
+from aquila.blueprint import Blueprint, Entry
+from aquila.script import DoFile
+from aquila.ninja import Ninja
 
 class Mode(Enum):
     COMP = 0
@@ -22,12 +32,12 @@ class Mode(Enum):
 
     @staticmethod
     def get_choices() -> list:
-        return ['comp', 'sim', 'gui']
+        return ['com', 'sim', 'gui']
 
     @staticmethod
     def from_str(s: str):
         s = s.lower()
-        if s == 'comp':
+        if s == 'com':
             return Mode.COMP
         elif s == 'sim':
             return Mode.SIM
@@ -38,33 +48,48 @@ class Mode(Enum):
 
 class Msim:
 
-    def __init__(self):
-        """
-        Create a new instance of the `msim` target.
-        """
+    @staticmethod
+    def from_args(args: list):
+        '''
+        Construct a new Msim instance from a set of arguments.
+        '''
         parser = argparse.ArgumentParser(prog='msim', allow_abbrev=False)
 
         parser.add_argument('--run', '-r', metavar='MODE', default='sim', choices=Mode.get_choices(), help='specify the mode to run')
-        parser.add_argument('--generic', '-g', action='append', type=Generic.from_arg, default=[], metavar='KEY=VALUE', help='override top-level generics')
+        parser.add_argument('--generic', '-g', action='append', type=KvPair.from_arg, default=[], metavar='KEY=VALUE', help='set top-level generics')
 
         args = parser.parse_args()
+        return Msim(
+            step=Mode.from_str(args.run),
+            generics=args.generic
+        )
 
+    def __init__(self, step: Mode, generics: list):
+        '''
+        Construct a new Msim instance.
+        '''
+        self.bp = Blueprint()
         # capture arguments into instance variables
-        self.mode = Mode.from_str(args.run)
-        self.generics: List[Generic] = args.generic
+        self.mode = step
+        self.generics: List[KvPair] = generics
 
         # additional instance variables
         self.entries = Blueprint().get_entries()
-        self.work_lib = Env.read('ORBIT_PROJECT_LIBRARY')
+        self.work_lib = env.read('ORBIT_PROJECT_LIBRARY')
         self.libs = set()
 
-        self.tb_name = Env.read('ORBIT_TB_NAME')
-        self.dut_name = Env.read('ORBIT_DUT_NAME')
+        self.tb_name = env.read('ORBIT_TB_NAME')
+        self.dut_name = env.read('ORBIT_DUT_NAME')
 
         # append modelsim installation path to PATH env variable
-        Env.add_path(Env.read("MODELSIM_PATH", missing_ok=True))
+        env.add_path(env.read("MODELSIM_PATH", missing_ok=True))
 
-        self.out_dir = Env.read('ORBIT_OUT_DIR')
+        # verify we are using the json plan for incremental compilation
+        bp_plan = self.bp.get_plan()
+        if bp_plan != 'json':
+            log.error('using unsupported blueprint plan "'+bp_plan+'": ghdl requires using the "json" plan')
+
+        self.out_dir = env.read('ORBIT_OUT_DIR')
         self.cmp_log = self.out_dir + '/' + 'compile.log'
         self.do_file = self.out_dir + '/' + 'run.do'
         self.sim_log = self.out_dir + '/' + 'run.log'
@@ -72,13 +97,13 @@ class Msim:
         # set modelsim to modify the current output directory
         ini_file = self.out_dir + '/' + 'modelsim.ini'
         if os.path.exists(ini_file) == False:
-            Command('vmap').args(['-quiet', '-c']).spawn()
-        Env.write('MODELSIM', ini_file)
+            Command(['vmap', '-quiet', '-c']).spawn()
+        env.write('MODELSIM', ini_file)
 
-    def write_build_file(self):
-        """
+    def prepare_compilation(self):
+        '''
         Writes a ninja build file.
-        """
+        '''
         nj = Ninja()
 
         def gen_out_file_name(path: str):
@@ -93,6 +118,7 @@ class Msim:
         nj.add_rule('vlog', 'vlog ${opts} -work ${lib} ${in} -outf ${out}')
         nj.add_rule('sysv', 'vlog ${opts} -sv -work ${lib} ${in} -outf ${out}')
 
+        entry: Entry
         for entry in self.entries:
             if not entry.is_builtin():
                 continue
@@ -102,25 +128,28 @@ class Msim:
             deps = [gen_out_file_name(p) for p in entry.deps]
             # add the build into the dependency graph
             nj.add_build(rule, [out], [entry.path], deps, {'lib': entry.lib})
-        
         nj.save()
 
-    def build(self):
-        """
+    def compile(self):
+        '''
         Calls ninja to compile the source files.
-        """
+        '''
         # build the list of source files
-        status = Command('ninja').spawn()
+        status = Command(['ninja']).spawn()
         if status.is_err():
-            print('@@@ BUILD FAILED (see log: \"'+self.cmp_log+'\")')
+            if os.path.exists(self.cmp_log):
+                print('\n@@@ COMPILATION FAILED (see log: \"'+self.cmp_log+'\")\n')
+            else:
+                print('\n@@@ COMPILATION FAILED @@@\n')
+            exit(status.value)
         if self.mode == Mode.COMP:
-            print('\n@@@ BUILD LOG: \"'+self.cmp_log+'\" @@@\n')
-            exit(0)
+            print('\n@@@ COMPILATION LOG: \"'+self.cmp_log+'\" @@@\n')
+            exit(status.value)
 
-    def write_do_file(self):
-        """
+    def prepare_run(self):
+        '''
         Generate the series of do file commands to implement the requested workflow.
-        """
+        '''
         do = DoFile(self.do_file)
         if self.mode == Mode.SIM or self.mode == Mode.GUI:
             self.initialize(do)
@@ -129,17 +158,14 @@ class Msim:
         do.save()
 
     def initialize(self, do: DoFile):
-        """
+        '''
         Adds commands to initialize the simulation with vsim.
-        """
-        do.comment('(1) Map libraries')
+        '''
+        do.comment_step('Map libraries')
         for (lib, path) in self.libs:
             do.push(['vmap', '-quiet', lib, path])
 
-        # (#) Compile the design
-        # - already accomplished prior by using ninja build system
-
-        do.comment('(2) Load the design into the simulator')
+        do.comment_step('Load the design into the simulator')
         vsim_args = [
             '-onfinish', 'stop', '-wlf', self.wlf_file,
             '+nowarn3116',
@@ -157,7 +183,7 @@ class Msim:
             # try to find a waves file
             wave_file = None
             for entry in self.entries:
-                if entry.fset == 'DOFI':
+                if entry.fset == 'WAV':
                     wave_file = entry.path
                     break
             if wave_file != None:
@@ -169,22 +195,22 @@ class Msim:
                 do.push('configure wave -signalnamewidth 1')
 
     def simulate(self, do: DoFile):
-        """
+        '''
         Adds commands to simulate the design with vsim.
-        """
-        do.comment('(3) Run the simulation')
+        '''
+        do.comment_step('Run the simulation')
         do.push('run -all')
         do.push('quit')
 
     def run(self):
-        """
+        '''
         Invoke modelsim to run the generated do file workflow.
-        """
-        status = Command('vsim') \
-            .arg("-batch" if not self.mode == Mode.GUI else "-gui") \
-            .args(['-do', self.do_file]) \
-            .args(['-logfile', self.sim_log]) \
-            .spawn()
+        '''
+        status = Command(['vsim', 
+            '-batch' if not self.mode == Mode.GUI else '-gui', 
+            '-do', self.do_file,
+            '-logfile', self.sim_log,
+        ]).spawn()
         
         # perform some post-processing to get a valid exit code
         print('\n@@@ SIMULATION LOG: \"'+self.sim_log+'\" @@@\n')
@@ -202,12 +228,10 @@ class Msim:
 
 
 def main():
-    msim = Msim()
-    # compile sources
-    msim.write_build_file()
-    msim.build()
-    # run simulation
-    msim.write_do_file()
+    msim = Msim.from_args(sys.argv[1:])
+    msim.prepare_compilation()
+    msim.compile()
+    msim.prepare_run()
     msim.run()
 
 

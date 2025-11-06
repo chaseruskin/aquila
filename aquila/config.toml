@@ -5,27 +5,29 @@ command = ["git", "clone", "{{ orbit.project.source }}", "-b", "{{ orbit.project
 patterns = ["*.git"]
 
 [[target]]
-name = "goku"
+name = "ghdl"
 description = "Run simulations with GHDL"
-command = ["python3", "gsim.py"]
+command = ["python3", "ghdl.py"]
+plans = ["json"]
 test = true
 build = false
 
 [[target]]
 name = "vi"
 description = "Run FPGA workflows with Vivado"
-command = ["python3", "voodoo.py"]
+command = ["python3", "vi.py"]
 test = false
 build = true
 fileset.xdcf = "{{ orbit.top.name }}.xdc"
 
 [[target]]
-name = "mojo"
+name = "msim"
 description = "Run simulations with ModelSim"
-command = ["python3", "mojo.py"]
+command = ["python3", "msim.py"]
+plans = ["json"]
 test = true
 build = false
-fileset.dofi = "{{ orbit.tb.name }}.do"
+fileset.wav = "{{ orbit.tb.name }}.do"
 
 
 # Below are unused... need refactoring

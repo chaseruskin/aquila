@@ -6,8 +6,8 @@
 # Reference:
 #   https://grittyengineer.com/vivado-project-mode-tcl-script/
 
-from mod import Env, Command, Generic, Tcl, Esc
-from voodoo import Step
+from aquila.utils import Env, Command, Generic, Tcl, Esc
+from aquila.vi import Step
 import argparse
 import os
 

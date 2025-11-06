@@ -1,11 +1,11 @@
 # Aquila
 
-> __Aquila__ is a constellation on the celestial equator, which represents the bird that carried Zeus/Jupiter's thunderbolts in Greek-Roman mythology.
-
 A collection of settings and processes for FPGA development with
 [Orbit](https://github.com/chaseruskin/orbit), a package manager and build system for VHDL, Verilog, and SystemVerilog.
 
 All settings are configured in [`config.toml`](aquila/config.toml). This is the file that must be recognized by Orbit for these settings to go into effect.
+
+> __Aquila__ is a constellation on the celestial equator, which represents the bird that carried Zeus/Jupiter's thunderbolts in Greek-Roman mythology.
 
 ### Installing
 
@@ -39,8 +39,8 @@ The following simulators/toolchains are supported:
 
 Tool | Target(s) | Build | Test | Dependencies
 -- | -- | -- | -- | --
-GHDL | `goku` | y | y | python, ninja
-ModelSim | `mojo` | y | y | python, ninja
+GHDL | `ghdl` | y | y | python, ninja
+ModelSim | `msim` | y | y | python, ninja
 Vivado | `vi` | y | | python
 Quartus | `quartz` | y | | python
 

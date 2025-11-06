@@ -6,6 +6,7 @@ description = "Orbit configurations for FPGA development"
 requires-python = ">=3.6.8"
 dependencies = [
     "toml==0.10.2",
+    "termcolor~=2.0"
 ]
 
 [project.scripts]

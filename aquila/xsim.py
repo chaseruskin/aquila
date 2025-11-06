@@ -4,7 +4,7 @@
 #   variable.
 
 import argparse
-from mod import Blueprint, Env, Tcl, Generic, Command
+from aquila.utils import Blueprint, Env, Tcl, Generic, Command
 
 def main():
     # append xsim (vivado) installation path to PATH env variable

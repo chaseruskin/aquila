@@ -1,0 +1,144 @@
+'''
+Wrapper module for accessing/modifying environment variables.
+'''
+
+import os
+import toml
+
+class KvPair:
+    '''
+    A key-value pair, useful for storing generics/parameters provided on the command-line.
+    '''
+    def __init__(self, key: str, val: str):
+        self.key = key
+        self.val = val
+
+    @staticmethod
+    def from_str(s: str):
+        # split on equal sign
+        words = s.split('=', 1)
+        if len(words) != 2:
+            return None
+        return KvPair(words[0], words[1])
+    
+    @staticmethod
+    def from_arg(s: str):
+        import argparse
+        result = KvPair.from_str(s)
+        if result is None:
+            msg = "key-value pair "+__quote_str(s)+" is missing <value>"
+            raise argparse.ArgumentTypeError(msg)
+        return result
+
+    def to_str(self) -> str:
+        return self.key+'='+self.val
+    
+    def __str__(self):
+        return self.key+'='+self.val
+    
+
+class Seed:
+    '''
+    An integer value used to set randomness.
+    '''
+
+    MIN_SEED_VALUE = 0
+    MAX_SEED_VALUE = (2**32)-1
+
+    def __init__(self, seed: int=None):
+        import random
+        self.seed = seed
+        if seed is None:
+            self.seed = random.randint(Seed.MIN_SEED_VALUE, Seed.MAX_SEED_VALUE)
+    
+    def get_seed(self) -> int:
+        '''
+        Returns the random seed.
+        '''
+        return self.seed
+    
+    @staticmethod
+    def from_str(s: str):
+        if s is not None:
+            s = int(s)
+        return Seed(s)
+    
+
+class Manifest:
+
+    def __init__(self, path: str=None):
+        self.path = path if path is not None else read('ORBIT_MANIFEST_FILE', missing_ok=False)
+        self.data = dict()
+        with open(self.path, 'r') as fd:
+            self.data = toml.loads(fd.read())
+
+    def get(self, table: str):
+        '''
+        Attempts to fetch data from `table` with the internal TOML dictionary.
+
+        Returns None if missing a key along with way.
+        '''
+        parts = table.split('.')
+        subtable = self.data
+        for p in parts:
+            try:
+                subtable = subtable[p]
+            except:
+                return None
+        return subtable
+
+
+def read(key: str, default: str=None, missing_ok: bool=True) -> None:
+    try:
+        value = os.environ[key]
+    except KeyError:
+        value = None
+    # do not allow empty values to trigger variable
+    if value is not None and len(value) == 0:
+        value = None
+    if value is None:
+        if missing_ok == False:
+            exit("error: environment variable "+__quote_str(key)+" does not exist")
+        else:
+            value = default
+    return value
+
+
+def write(key: str, value: str):
+    os.environ[key] = str(value)
+
+
+def add_path(path: str, key: str='PATH') -> bool:
+    '''
+    Adds the `path` to the environment variable `key`.
+    '''
+    if path is not None and os.path.exists(path) and len(path) > 0 and os.getenv(key) is None:
+        os.environ[key] = path
+        return True
+    if path is not None and os.path.exists(path) and len(path) > 0 and path not in os.getenv(key):
+        os.environ[key] += os.pathsep + path
+        return True
+    return False
+
+
+def prepend(key, value: str):
+    if value is not None and os.path.exists(value) and len(value) > 0 and (os.getenv(key) is None or value not in os.getenv(key)):
+        if os.getenv(key) is None:
+            os.environ[key] = value + os.pathsep
+        else:
+            os.environ[key] = value + os.pathsep + os.environ[key]
+
+@staticmethod
+def append(key, value: str):
+    if value is not None and os.path.exists(value) and len(value) > 0 and (os.getenv(key) is None or value not in os.getenv(key)):
+        if os.getenv(key) is None:
+            os.environ[key] = value
+        else:
+            os.environ[key] += os.pathsep + value
+
+
+def __quote_str(s: str) -> str:
+    '''
+    Wraps the string `s` around double quotes `\"` characters."
+    '''
+    return '\"' + s + '\"'

@@ -9,7 +9,7 @@
 #   https://www.intel.co.jp/content/dam/altera-www/global/ja_JP/pdfs/literature/an/an312.pdf
 #   https://community.intel.com/t5/Intel-Quartus-Prime-Software/Passing-parameter-generic-to-the-top-level-in-Quartus-tcl/td-p/239039
 
-from mod import Command, Env, Generic, Blueprint, TclScript
+from aquila.utils import Command, Env, Generic, Blueprint, TclScript
 import os
 import argparse
 from enum import Enum

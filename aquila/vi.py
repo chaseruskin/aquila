@@ -1,3 +1,7 @@
+'''
+Logic and control for interfacing with the Vivado FPGA toolchain.
+'''
+
 # Provides the glue logic between a filelist and the Xilinx Vivado EDA tool.
 # This script generates a tcl script and executes it using Vivado in a 
 # subprocess.
@@ -9,10 +13,17 @@
 #   https://grittyengineer.com/vivado-non-project-mode-releasing-vivados-true-potential/
 #   https://www.xilinx.com/support/documents/sw_manuals/xilinx2022_2/ug894-vivado-tcl-scripting.pdf
 
-from mod import Env, Command, Generic, Blueprint, TclScript
 import argparse
 from enum import Enum
+import sys
 import os
+
+from aquila import log
+from aquila import env
+from aquila.env import KvPair, Manifest
+from aquila.process import Command
+from aquila.blueprint import Blueprint, Entry
+from aquila.script import TclScript
 
 
 TCL_PROC_REPORT_CRITPATHS = '''\
@@ -52,9 +63,9 @@ proc report_critical_paths { file_name } {
 
 
 class Step(Enum):
-    """
+    '''
     Enumeration of the possible workflows to run using vivado.
-    """
+    '''
     Syn = 0
     Plc = 1
     Rte = 2
@@ -63,9 +74,9 @@ class Step(Enum):
     
     @staticmethod
     def from_str(s: str):
-        """
+        '''
         Convert a `str` datatype into a `Step`.
-        """
+        '''
         s = str(s).lower()
         if s == 'syn':
             return Step.Syn
@@ -78,112 +89,104 @@ class Step(Enum):
         if s == 'pgm':
             return Step.Pgm
         return ValueError
-    pass
 
 
-class Voodoo:
-    
-    def __init__(self):
-        """
-        Create a new instance of the target workflow.
-        """
-        # collect command-line arguments
-        parser = argparse.ArgumentParser(prog='voodoo', allow_abbrev=False)
+class Vi:
+    '''
+    Interface for backend build process for the Vivado FPGA toolchain.
+    '''
 
-        parser.add_argument('--generic', '-g', action='append', type=Generic.from_arg, default=[], metavar='KEY=VALUE', help='override top-level generics/parameters')
-        parser.add_argument('--part', help='specify the targeted fpga device')
-        parser.add_argument('--run', '-r', default='syn', choices=['syn', 'plc', 'rte', 'bit', 'pgm'], help='select the workflow to execute')
-        parser.add_argument('--clock', '-c', metavar='NAME=FREQ', help='constrain a pin as a clock at the set frequency (MHz)')
-        args = parser.parse_args()
+    # Part to use when one is not specified by the user
+    DEFAULT_PART = 'xc7s25-csga324'
 
-        # capture all command-line arguments into instance variables
-        self.proc = Step.from_str(args.run)
-        self.part = 'xc7s25-csga324'
-        if args.part == None:
-            print('info: using default part "'+self.part+'" since no part was selected')
+    def __init__(self, step: str, part: str, generics: list, clock: KvPair):
+        '''
+        Construct a new Vi instance.
+        '''
+        self.man = Manifest()
+        self.bp = Blueprint()
+        self.entries = self.bp.get_entries()
+
+        self.step = Step.from_str(step)
+
+        cfg_part = self.man.get('project.metadata.vivado.part')
+        if part is not None:
+            self.part = part
+        elif cfg_part is not None:
+            self.part = cfg_part
         else:
-            self.part = args.part
+            log.info('using default part '+self.part+' since no part was defined')
+            self.part = Vi.DEFAULT_PART            
 
-        self.tcl_generics = []
-        for g in args.generic:
-            self.tcl_generics += ['-generic', str(g)]
-            pass
+        self.OUT_DIR = env.read('ORBIT_OUT_DIR')
+        self.TOP_NAME = env.read('ORBIT_TOP_NAME', missing_ok=False)
 
-        # capture the additional clock constraint
-        self.clock = None
-        if args.clock != None:
-            port, freq = args.clock.split('=')
-            period = 1.0/((float(freq)*1.0e6))*1.0e9
-            period = round(period, 2)
-            self.clock = (str(port), str(period))
+        self.bit_file = self.TOP_NAME + '.bit'
+        self.tcl_path = self.OUT_DIR + '/' + 'run.tcl'
+        self.log_path = self.OUT_DIR + '/' + 'run.log'
 
-        # set other necessary instance variables
-        self.output_path = Env.read('ORBIT_OUT_DIR')
+        self.generics = generics
+        self.clock = clock
 
-        self.top: str = str(Env.read('ORBIT_TOP_NAME', missing_ok=False))
-        self.bit_file: str = str(self.top)+'.bit'
+    @staticmethod
+    def from_args(args: list):
+        '''
+        Construct a new Vi instance from a set of arguments.
+        '''
+        parser = argparse.ArgumentParser(prog='vi', allow_abbrev=False)
 
-        self.tcl_path = self.output_path + '/' + 'run.tcl'
-        self.log_path = self.output_path + '/' + 'run.log'
+        parser.add_argument('--run', '-r', default='syn', choices=['syn', 'plc', 'rte', 'bit', 'pgm'], help='select the workflow to execute')
+        parser.add_argument('--part', metavar='DEVICE', default=None, help='specify the targeted fpga device')
+        parser.add_argument('--generic', '-g', action='append', type=KvPair.from_arg, default=[], metavar='KEY=VALUE', help='set top-level generics')
+        parser.add_argument('--clock', '-c', metavar='NAME=FREQ', type=KvPair.from_arg, help='constrain a pin as a clock at the set frequency (MHz)')
+        
+        args = parser.parse_args()
+        return Vi(
+            step=args.run,
+            part=args.part,
+            generics=args.generic,
+            clock=args.clock,
+        )
 
-        self.entries = []
-        pass
-
-    def read_blueprint(self):
-        """
-        Process the blueprint contents.
-        """
-        self.entries = Blueprint().parse()
-
-    def run(self):
-        """
-        Invoke vivado in batch mode to run the generated tcl script.
-        """
-        result = Command('vivado') \
-            .args(['-mode', 'batch', '-nojournal', '-log', self.log_path, '-source', self.tcl_path]) \
-            .spawn()
-        # report to the user where the log can be found
-        print('\n@@@ RUN LOG: \"'+self.log_path+'\" @@@\n')
-        result.unwrap()
-
-    def write_tclscript(self):
-        """
+    def prepare(self):
+        '''
         Generate the target's tcl script to be used by vivado.
-        """
+        '''
         tcl = TclScript(self.tcl_path)
         # write required introduction tcl comments and commands
         self.import_prelude(tcl)
         # add source files
         self.add_sources(tcl)
         # generate the necessary tcl commands for the requested workflow
-        if self.proc.value >= Step.Syn.value:
+        if self.step.value >= Step.Syn.value:
             self.synthesize(tcl)
-        if self.proc.value >= Step.Plc.value:
+        if self.step.value >= Step.Plc.value:
             self.place(tcl)
-        if self.proc.value >= Step.Rte.value:
+        if self.step.value >= Step.Rte.value:
             self.route(tcl)
-        if self.proc.value >= Step.Bit.value:
+        if self.step.value >= Step.Bit.value:
             self.bitstream(tcl)
-        if self.proc.value >= Step.Pgm.value:
+        if self.step.value >= Step.Pgm.value:
             self.program(tcl)
         # write the tcl script to its file
         tcl.save()
         
     def import_prelude(self, tcl: TclScript):
-        """
+        '''
         Generate any tcl that is required later in the script.
-        """
+        '''
         tcl.push(TCL_PROC_REPORT_CRITPATHS)
         tcl.comment('Disable webtalk')
         tcl.push('config_webtalk -user off')
 
     def add_sources(self, tcl: TclScript):
-        """
+        '''
         Generate the tcl commands required to add sources to the non-project mode
         workflow.
-        """
+        '''
         tcl.push()
-        tcl.comment('(1) Add source files')
+        tcl.comment_step('Add source files')
+        entry: Entry
         for entry in self.entries:
             if entry.is_vhdl():
                 tcl.push(['read_vhdl', '-library', entry.lib, '"'+entry.path+'"'])
@@ -196,35 +199,38 @@ class Voodoo:
                 pass
 
         # create a clock constraint xdc
-        if self.clock != None:
-            clock_xdc = TclScript('clock.xdc')
-            name, period = self.clock
+        if self.clock is not None:
+            clock_xdc_path = self.OUT_DIR + '/' + 'clocks.xdc'
+            clock_xdc = TclScript(clock_xdc_path)
+
+            name = self.clock.key
+            period = 1.0/((float(self.clock.val)*1.0e6))*1.0e9
+            period = round(period, 2)
+
             clock_xdc.push(['create_clock', '-add', '-name', name, '-period', period, '[get_ports { '+name+' }];'])
             clock_xdc.save()
-            clock_xdc_path = self.output_path + '/' + clock_xdc.get_path()
-            tcl.push(['read_xdc', '"'+clock_xdc_path+'"'])
-            pass
+            
+            tcl.push(['read_xdc', '"'+clock_xdc.get_path()+'"'])
 
     def synthesize(self, tcl: TclScript):
-        """
+        '''
         Generate tcl commands for performing synthesis.
-        """
+        '''
         tcl.push()
-        tcl.comment('(2) Run synthesis task')
-        tcl.push(['synth_design', '-top', self.top, '-part', self.part] + self.tcl_generics)
+        tcl.comment_step('Run synthesis task')
+        tcl.push(['synth_design', '-top', self.TOP_NAME, '-part', self.part] + ['-generic '+str(g) for g in self.generics])
         tcl.push('write_checkpoint -force post_synth.dcp')
         tcl.push('report_timing_summary -file post_synth_timing_summary.rpt')
         tcl.push('report_utilization -file post_synth_util.rpt')
         tcl.comment('Run custom script to report critical timing paths')
-        tcl.push('report_critical_paths post_synth_critpath_report.csv')
-        pass
+        tcl.push('report_critical_paths post_synth_timing.csv')
 
     def place(self, tcl: TclScript):
-        """
+        '''
         Generate tcl commands for performing optimizations and placement.
-        """
+        '''
         tcl.push()
-        tcl.comment('(3) Run logic optimization, placement, and physical logic optimization')
+        tcl.comment_step('Run logic optimization, placement, and physical logic optimization')
         tcl.push('opt_design')
         tcl.push('report_critical_paths post_opt_critpath_report.csv')
         tcl.push('place_design')
@@ -241,11 +247,11 @@ class Voodoo:
         tcl.push('report_timing_summary -file post_place_timing_summary.rpt')
 
     def route(self, tcl: TclScript):
-        """
+        '''
         Generate tcl commands for performing routing.
-        """
+        '''
         tcl.push()
-        tcl.comment('(4) Run routing for the design')
+        tcl.comment_step('Run routing for the design')
         tcl.push('route_design')
         tcl.push('write_checkpoint -force post_route.dcp')
         tcl.push('report_route_status -file post_route_status.rpt')
@@ -255,19 +261,19 @@ class Voodoo:
         tcl.push('write_verilog -force rte_netlist.v -mode timesim -sdf_anno true')
 
     def bitstream(self, tcl: TclScript):
-        """
+        '''
         Generate the tcl commands to write the bitstream.
-        """
+        '''
         tcl.push()
-        tcl.comment('(5) Generate the bitstream')
+        tcl.comment_step('Generate the bitstream')
         tcl.push(['write_bitstream', '-force', self.bit_file])
 
     def program(self, tcl: TclScript):
-        """
+        '''
         Generate the tcl commands to program the bitstream to a board.
-        """
+        '''
         tcl.push()
-        tcl.comment('(6) Program the connected FPGA device')
+        tcl.comment_step('Program the connected FPGA device')
         tcl.push('open_hw_manager')
         tcl.push('connect_hw_server -allow_non_jtag')
         tcl.push('open_hw_target')
@@ -283,14 +289,23 @@ class Voodoo:
         tcl.push('program_hw_devices $device')
         tcl.push('refresh_hw_device $device')
 
+    def run(self):
+        '''
+        Invoke vivado in batch mode to run the generated tcl script.
+        '''
+        stat = Command(['vivado', '-mode', 'batch', '-nojournal', '-log', self.log_path, '-source', self.tcl_path]).spawn()
+        # report to the user where the log can be found
+        if os.path.exists(self.log_path):
+            print('\n@@@ RUN LOG: \"'+self.log_path+'\" @@@\n')
+        stat.unwrap()
+
 
 def main():
-    voodoo = Voodoo()
-    voodoo.read_blueprint()
-    voodoo.write_tclscript()
-    voodoo.run()
-    pass
-
+    vi = Vi.from_args(sys.argv[1:])
+    log.info('preparing build...')
+    vi.prepare()
+    log.info('running backend process...')
+    vi.run()
 
 if __name__ == '__main__':
     main()

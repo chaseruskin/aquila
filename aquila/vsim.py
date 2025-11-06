@@ -7,7 +7,7 @@
 import argparse
 from typing import List
 
-from mod import Command, Env, Generic, Blueprint, Hdl
+from aquila.utils import Command, Env, Generic, Blueprint, Hdl
 
 # set up environment and constants
 BENCH = Env.read("ORBIT_TB_NAME", missing_ok=True)
