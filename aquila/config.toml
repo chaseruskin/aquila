@@ -51,7 +51,7 @@ fileset.bdf = "*.bdf"
 [[target]]
 name = "xpro"
 description = "Xilinx Vivado project mode toolflow"
-command = ["python3", "xpro.py"]
+command = ["python", "xpro.py"]
 build = true
 test = false
 fileset.xdcf = "*.xdc"

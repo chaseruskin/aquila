@@ -48,26 +48,6 @@ class Ghdl:
         if bp_plan != 'json':
             log.error('using unsupported blueprint plan "'+bp_plan+'": ghdl requires using the "json" plan')
 
-    def verify_all_generics_have_values(self) -> bool:
-        '''
-        Verifies all generics have some value, either from the command-line or as a default.
-        '''
-        import json
-        cli_gens = {}
-        for gen in self._generics:
-            cli_gens[gen.key.lower()] = gen.val
-            
-        dut_json = json.loads(env.read('ORBIT_DUT_JSON'))
-        dut_gens = dut_json['generics']
-        missing_gen = False
-        for gen in dut_gens:
-            if gen['default'] is None:
-                if gen['identifier'].lower() not in cli_gens:
-                    log.error('missing value for generic "'+gen['identifier']+'"', exit_on_err=False)
-                    missing_gen = True
-        if missing_gen == True:
-            exit(101)
-
     @staticmethod
     def from_args(args: list):
         parser = argparse.ArgumentParser('ghdl', allow_abbrev=False)
@@ -89,6 +69,8 @@ class Ghdl:
         '''
         Writes a ninja build file.
         '''
+        env.verify_all_generics_have_values(env.read('ORBIT_DUT_JSON'), self._generics)
+
         nj = Ninja()
 
         def gen_out_file_name(path: str):
@@ -237,7 +219,6 @@ class Ghdl:
 
 def main():
     ghdl = Ghdl.from_args(sys.argv[1:])
-    ghdl.verify_all_generics_have_values()
     ghdl.prepare()
     ghdl.compile()
     ghdl.run()

@@ -4,6 +4,7 @@ Wrapper module for accessing/modifying environment variables.
 
 import os
 import toml
+from aquila import log
 
 class KvPair:
     '''
@@ -86,6 +87,31 @@ class Manifest:
             except:
                 return None
         return subtable
+    
+
+def verify_all_generics_have_values(data: str, cli: list) -> bool:
+    '''
+    Verifies all generics have some value, either from the command-line or as a default, where
+    `data` is the raw string holding the serialized data of the top-level and `cli` is the list of generics passed
+    from the command-line.
+
+    Exits 101 if a generic value is not supplied.
+    '''
+    import json
+    cli_gens = {}
+    gen: KvPair
+    for gen in cli:
+        cli_gens[gen.key.lower()] = gen.val
+    
+    dut_gens = json.loads(data)['generics']
+    missing_gen = False
+    for gen in dut_gens:
+        if gen['default'] is None:
+            if gen['identifier'].lower() not in cli_gens:
+                log.error('missing value for generic "'+gen['identifier']+'"', exit_on_err=False)
+                missing_gen = True
+    if missing_gen == True:
+        exit(101)
 
 
 def read(key: str, default: str=None, missing_ok: bool=True) -> None:

@@ -100,6 +100,16 @@ class Vi:
     # Part to use when one is not specified by the user
     DEFAULT_PART = 'xc7s25-csga324'
 
+    # List of Vivado messages to adjust severity levels
+    MSG_SEV_MAP = {
+        'ERROR' : [
+            # inferred latches
+            'Synth 8-327',
+            # read signal missing in sensivity list
+            'Synth 8-614',
+        ]
+    }
+
     def __init__(self, step: str, part: str, generics: list, clock: KvPair):
         '''
         Construct a new Vi instance.
@@ -161,8 +171,13 @@ class Vi:
         '''
         Generate the target's tcl script to be used by vivado.
         '''
+        env.verify_all_generics_have_values(env.read('ORBIT_TOP_JSON'), self.generics)
+
+        vivado_cmd = 'vivado' if os.name != 'nt' else 'vivado.bat'
+        
         self.nj.add_def_var('opts', '-mode batch -nojournal -applog -log '+self.log_path)
-        self.nj.add_rule('fpga', 'vivado ${opts} -source ${in}')
+        
+        self.nj.add_rule('fpga', vivado_cmd+' ${opts} -source ${in}')
 
         # the top-most command to call when using the Ninja build system
         self.top_cmd = None
@@ -170,32 +185,32 @@ class Vi:
         # generate the necessary tcl commands for the requested workflow
         self.import_prelude(self.syn_tcl)
         dep_files = self.add_sources(self.syn_tcl)
-        dcp = self.synthesize(self.syn_tcl)
-        self.nj.add_build('fpga', [dcp], [self.syn_tcl.get_path()], dep_files)
+        syn_dcp = self.synthesize(self.syn_tcl)
+        self.nj.add_build('fpga', [syn_dcp], [self.syn_tcl.get_path()], dep_files)
         if self.step.value == Step.Syn.value:
-            self.top_cmd = dcp
+            self.top_cmd = syn_dcp
         # placement tcl script
         self.import_prelude(self.plc_tcl)
-        dcp = self.place(self.plc_tcl, dcp)
-        self.nj.add_build('fpga', [dcp], [self.plc_tcl.get_path()])
+        plc_dcp = self.place(self.plc_tcl, syn_dcp)
+        self.nj.add_build('fpga', [plc_dcp], [self.plc_tcl.get_path()], [syn_dcp])
         if self.step.value == Step.Plc.value:
-            self.top_cmd = dcp
+            self.top_cmd = plc_dcp
         # routing tcl script
         self.import_prelude(self.rte_tcl)
-        dcp = self.route(self.rte_tcl, dcp)
-        self.nj.add_build('fpga', [dcp], [self.rte_tcl.get_path()])
+        rte_dcp = self.route(self.rte_tcl, plc_dcp)
+        self.nj.add_build('fpga', [rte_dcp], [self.rte_tcl.get_path()], [plc_dcp])
         if self.step.value == Step.Rte.value:
-            self.top_cmd = dcp
+            self.top_cmd = rte_dcp
         # bitstream tcl script
         self.import_prelude(self.bit_tcl)
-        bitfile = self.bitstream(self.bit_tcl, dcp)
-        self.nj.add_build('fpga', [bitfile], [self.bit_tcl.get_path()])
+        bitfile = self.bitstream(self.bit_tcl, rte_dcp)
+        self.nj.add_build('fpga', [bitfile], [self.bit_tcl.get_path()], [rte_dcp])
         if self.step.value == Step.Bit.value:
-            self.top_cmd = dcp
+            self.top_cmd = bitfile
         # programming tcl script
         self.import_prelude(self.pgm_tcl)
         self.program(self.pgm_tcl)
-        self.nj.add_build('fpga', ['out'], [self.pgm_tcl.get_path()])
+        self.nj.add_build('fpga', ['out'], [self.pgm_tcl.get_path()], [bitfile])
         if self.step.value == Step.Pgm.value:
             self.top_cmd = None
 
@@ -208,6 +223,10 @@ class Vi:
         tcl.push(TCL_PROC_REPORT_CRITPATHS)
         tcl.comment('Disable webtalk')
         tcl.push('config_webtalk -user off')
+        # adjust message severity levels
+        for (lvl, msgs) in Vi.MSG_SEV_MAP.items():
+            for msg in msgs:
+                tcl.push('set_msg_config -id {'+msg+'} -new_severity {'+lvl+'}')
 
     def add_sources(self, tcl: TclScript):
         '''
@@ -221,7 +240,7 @@ class Vi:
         src_files = []
         for entry in self.entries:
             if entry.is_vhdl():
-                tcl.push(['read_vhdl', '-library', entry.lib, '"'+entry.path+'"'])
+                tcl.push(['read_vhdl', '-vhdl2008', '-library', entry.lib, '"'+entry.path+'"'])
                 src_files += [entry.path]
             if entry.is_vlog():
                 tcl.push(['read_verilog', '-library', entry.lib, '"'+entry.path+'"'])
@@ -244,11 +263,24 @@ class Vi:
             period = round(period, 2)
 
             clock_xdc.push(['create_clock', '-add', '-name', name, '-period', period, '[get_ports { '+name+' }];'])
-            clock_xdc.save()
+            if self.requires_save(clock_xdc):
+                clock_xdc.save()
             
             tcl.push(['read_xdc', '"'+clock_xdc.get_path()+'"'])
             src_files += [clock_xdc.get_path()]
         return src_files
+    
+    def requires_save(self, tcl: TclScript) -> bool:
+        '''
+        Check if this TCL script requires saving (overwriting its existing contents).
+        '''
+        contents_match = False
+        if os.path.exists(tcl.get_path()):
+            existing_data = ''
+            with open(tcl.get_path(), 'r') as fd:
+                existing_data = fd.read()
+            contents_match = existing_data == tcl.get_data()
+        return contents_match == False
 
     def synthesize(self, tcl: TclScript) -> str:
         '''
@@ -263,7 +295,8 @@ class Vi:
         tcl.push('report_utilization -file post_syn_util.rpt')
         tcl.comment('Run custom script to report critical timing paths')
         tcl.push('report_critical_paths post_syn_timing.csv')
-        tcl.save()
+        if self.requires_save(tcl):
+            tcl.save()
         return dcp
 
     def place(self, tcl: TclScript, last_dcp: str):
@@ -273,7 +306,7 @@ class Vi:
         dcp = 'post_plc.dcp'
         tcl.push()
         tcl.comment_step('Load previous design checkpoint')
-        tcl.push('read_checkpoint '+last_dcp)
+        tcl.push('open_checkpoint '+last_dcp)
         tcl.push()
         tcl.comment_step('Run logic optimization, placement, and physical logic optimization')
         tcl.push('opt_design')
@@ -290,7 +323,8 @@ class Vi:
         tcl.push('write_checkpoint -force '+dcp)
         tcl.push('report_utilization -file post_plc_util.rpt')
         tcl.push('report_timing_summary -file post_plc_timing_summary.rpt')
-        tcl.save()
+        if self.requires_save(tcl):
+            tcl.save()
         return dcp
 
     def route(self, tcl: TclScript, last_dcp: str):
@@ -300,7 +334,7 @@ class Vi:
         dcp = 'post_rte.dcp'
         tcl.push()
         tcl.comment_step('Load previous design checkpoint')
-        tcl.push('read_checkpoint '+last_dcp)
+        tcl.push('open_checkpoint '+last_dcp)
         tcl.push()
         tcl.comment_step('Run routing for the design')
         tcl.push('route_design')
@@ -310,7 +344,8 @@ class Vi:
         tcl.push('report_power -file post_rte_power.rpt')
         tcl.push('report_drc -file post_impl_drc.rpt')
         # tcl.push('write_verilog -force rte_netlist.v -mode timesim -sdf_anno true')
-        tcl.save()
+        if self.requires_save(tcl):
+            tcl.save()
         return dcp
 
     def bitstream(self, tcl: TclScript, last_dcp: str):
@@ -319,11 +354,12 @@ class Vi:
         '''
         tcl.push()
         tcl.comment_step('Load previous design checkpoint')
-        tcl.push('read_checkpoint '+last_dcp)
+        tcl.push('open_checkpoint '+last_dcp)
         tcl.push()
         tcl.comment_step('Generate the bitstream')
         tcl.push(['write_bitstream', '-force', self.bit_file])
-        tcl.save()
+        if self.requires_save(tcl):
+            tcl.save()
         return self.bit_file
 
     def program(self, tcl: TclScript):
@@ -346,7 +382,8 @@ class Vi:
         tcl.comment('Program and refresh the detected FPGA device')
         tcl.push('program_hw_devices $device')
         tcl.push('refresh_hw_device $device')
-        tcl.save()
+        if self.requires_save(tcl):
+            tcl.save()
 
     def run(self):
         '''

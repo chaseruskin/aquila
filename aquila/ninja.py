@@ -75,7 +75,7 @@ class Ninja:
             result = ''
             for f in files:
                 # escape spaces in file paths
-                result += f.replace(' ', '$ ') + ' '
+                result += f.replace(' ', '$ ').replace(':', '$:') + ' '
             return result[:-1]
 
         # add default bindings
