@@ -137,7 +137,7 @@ class Quartz:
         Invoke vivado in batch mode to run the generated tcl script.
         """
         # Create the project
-        Command('quartus_sh').args(['-t', self.tcl_path]).spawn().unwrap()
+        Command(['quartus_sh', '-t', self.tcl_path]).spawn().unwrap()
         # Run the requested workflow(s)
         if self.step.value >= Step.Syn.value:
             self.synthesize()
