@@ -17,10 +17,11 @@ import os
 import argparse
 from enum import Enum
 import sys
+import toml
 
 from aquila import env
 from aquila import log
-from aquila.env import KvPair
+from aquila.env import KvPair, Manifest
 from aquila.process import Command
 from aquila.blueprint import Blueprint, Entry
 from aquila.script import TclScript
@@ -56,11 +57,11 @@ class Step(Enum):
         Convert a `str` datatype into a `Step`.
         """
         s = str(s).lower()
-        if s == 'map':
+        if s == 'syn':
             return Step.Syn
-        if s == 'fit':
+        if s == 'par':
             return Step.Pnr
-        if s == 'asm':
+        if s == 'bit':
             return Step.Bit
         if s == 'pgm':
             return Step.Pgm
@@ -71,11 +72,12 @@ class Quartz:
 
     DEFAULT_PART = '10M50DAF484C7G'
 
-
     def __init__(self, step: Step, part: str, generics: list, clock: KvPair, store: str):
         '''
         Construct a new Quartz instance.
         '''
+
+        self.man = Manifest()
 
         self.step = step
         self.part = part
@@ -87,7 +89,12 @@ class Quartz:
         self.TOP_NAME: str = str(env.read('ORBIT_TOP_NAME', missing_ok=False))
         self.PROJECT_NAME: str = str(env.read('ORBIT_PROJECT_NAME'))
 
-        if self.part is None:
+        cfg_part = self.man.get('project.metadata.quartus.part')
+        if part is not None:
+            self.part = part
+        elif cfg_part is not None:
+            self.part = cfg_part
+        else:
             self.part = Quartz.DEFAULT_PART
             log.info('using default part "'+self.part+'" since no part was selected')
 
@@ -106,7 +113,7 @@ class Quartz:
         """
         parser = argparse.ArgumentParser(prog='quartz', allow_abbrev=False)
 
-        parser.add_argument('--run', '-r', default='map', choices=['map', 'fit', 'asm', 'pgm'])
+        parser.add_argument('--run', '-r', default='syn', choices=['syn', 'par', 'bit', 'pgm'])
         parser.add_argument("--part", action="store", default=None, type=str, help="set the targeted fpga device")
         parser.add_argument('--store', default='sram', choices=['flash', 'sram'], help='specify where to program the bitstream')
         parser.add_argument('--generic', '-g', action='append', type=KvPair.from_arg, default=[], metavar='KEY=VALUE', help='set top-level generics')
@@ -178,6 +185,8 @@ class Quartz:
         """
         tcl.push()
         tcl.comment_step('Add source files')
+
+        pdc_path = None
         entry: Entry
         for entry in self.entries:
             if entry.is_vhdl():
@@ -188,6 +197,8 @@ class Quartz:
                 tcl.push(['set_global_assignment', '-name', 'SYSTEMVERILOG_FILE', '"'+entry.path+'"', '-library', entry.lib])
             if entry.is_aux('SDCF'):
                 tcl.push(['set_global_assignment', '-name', 'SDC_FILE', '"'+entry.path+'"'])
+            if entry.is_aux('PDCF'):
+                pdc_path = entry.path
 
         # create a clock constraint xdc
         if self.clock != None:
@@ -203,6 +214,13 @@ class Quartz:
             clock_sdc.push(['create_clock', '-name', '{'+port+'}', '-period', period, '[get_ports { '+port+' }]'])
             clock_sdc.save()
             tcl.push(['set_global_assignment', '-name', 'SDC_FILE', '"'+clock_sdc.get_path()+'"'])
+
+        if pdc_path is not None:
+            tcl.comment_step('Set pin constraints')
+            with open(pdc_path, 'r') as fd:
+                pdc_dict = toml.loads(fd.read())
+            for (pin, port) in pdc_dict.items():
+                tcl.push(['set_location_assignment', 'PIN', str(pin), '-to', '"'+str(port)+'"'])
 
     def synthesize(self):
         """

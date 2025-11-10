@@ -29,6 +29,14 @@ test = true
 build = false
 fileset.wav = "{{ orbit.tb.name }}.do"
 
+[[target]]
+name = "quartz"
+description = "Intel Quartus Prime toolflow"
+command = ["python3", "quartz.py"]
+build = true
+test = false
+fileset.pdcf = "{{ orbit.top.name }}.pdc.toml"
+fileset.sdcf = "{{ orbit.top.name }}.sdc"
 
 # Below are unused... need refactoring
 
@@ -38,15 +46,6 @@ description = "Vivado Simulator general-purpose simulations"
 command = ["python3", "xsim.py"]
 build = true
 test = true
-
-[[target]]
-name = "quartz"
-description = "Intel Quartus Prime toolflow"
-command = ["python3", "quartz.py"]
-build = true
-test = false
-fileset.board = "*.board.toml"
-fileset.bdf = "*.bdf"
 
 [[target]]
 name = "xpro"
