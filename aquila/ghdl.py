@@ -54,14 +54,13 @@ class Ghdl:
 
         parser.add_argument('--run', '-r', action='store', choices=Ghdl.MODES, default=Ghdl.SIM_MODE)
         parser.add_argument('--generic', '-g', action='append', type=KvPair.from_arg, default=[], metavar='KEY=VALUE', help='set top-level generics')
-        parser.add_argument('--seed', metavar='NUM', action='store', default=Seed(), type=Seed.from_str, help='set random seed')
         parser.add_argument('--time-res', '-t', metavar='UNITS', default='ps', help='set the simulation time resolution')
 
         args = parser.parse_args(args)
         return Ghdl(
             mode=args.run,
             generics=args.generic,
-            seed=Seed(),
+            seed=None,
             time_res=args.time_res,
         )
 
@@ -170,7 +169,13 @@ class Ghdl:
         gens = ''
         for g in self._generics:
             gens += '_'+g.key+'='+g.val.replace('.', '-').replace('/', '-').replace('\\', '-')
-        full_path = base_dir + '/' + self.dut_name + '_' + gens + '_seed=' + str(self._seed.get_seed())
+        seed = ''
+        if self._seed is not None:
+            seed = '_seed=' + str(self._seed.get_seed())
+
+        full_path = base_dir + '/' + self.dut_name 
+        if len(seed) > 0 or len(gens) > 0:
+            full_path += '_' + gens + seed
         return full_path
 
     def generate_code_coverage_file(self, table: dict, out_path: str):

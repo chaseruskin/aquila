@@ -41,7 +41,7 @@ Tool | Target(s) | Build | Test | Dependencies
 -- | -- | -- | -- | --
 GHDL | `ghdl` | y | y | python, ninja
 ModelSim | `msim` | y | y | python, ninja
-Vivado | `vi` | y | | python
+Vivado | `vi` | y | | python, ninja
 Quartus | `quartz` | y | | python
 
 ## Protocols

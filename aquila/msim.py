@@ -95,15 +95,17 @@ class Msim:
         self.sim_log = self.out_dir + '/' + 'run.log'
         self.wlf_file = self.out_dir + '/' + str(self.tb_name) + '.wlf'
         # set modelsim to modify the current output directory
-        ini_file = self.out_dir + '/' + 'modelsim.ini'
-        if os.path.exists(ini_file) == False:
-            Command(['vmap', '-quiet', '-c']).spawn()
-        env.write('MODELSIM', ini_file)
+        self.ini_file = self.out_dir + '/' + 'modelsim.ini'
+        env.write('MODELSIM', self.ini_file)
 
     def prepare_compilation(self):
         '''
         Writes a ninja build file.
         '''
+
+        if self.mode.value != Mode.COMP.value:
+            env.verify_all_generics_have_values(env.read('ORBIT_TB_JSON'), self.generics)
+
         nj = Ninja()
 
         def gen_out_file_name(path: str):
@@ -134,6 +136,8 @@ class Msim:
         '''
         Calls ninja to compile the source files.
         '''
+        if os.path.exists(self.ini_file) == False:
+            Command(['vmap', '-quiet', '-c']).spawn()
         # build the list of source files
         status = Command(['ninja']).spawn()
         if status.is_err():

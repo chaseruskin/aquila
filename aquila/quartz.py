@@ -1,3 +1,7 @@
+'''
+Logic and control for interfacing with the Quartus FPGA toolchain.
+'''
+
 # Creates a Quartus project to execute any stage of the FPGA toolchain
 # workflow. This script has the ability to override the top-level generics
 # through the writing of a TCL script to eventually get called by Quartus.
@@ -9,10 +13,17 @@
 #   https://www.intel.co.jp/content/dam/altera-www/global/ja_JP/pdfs/literature/an/an312.pdf
 #   https://community.intel.com/t5/Intel-Quartus-Prime-Software/Passing-parameter-generic-to-the-top-level-in-Quartus-tcl/td-p/239039
 
-from aquila.utils import Command, Env, Generic, Blueprint, TclScript
 import os
 import argparse
 from enum import Enum
+import sys
+
+from aquila import env
+from aquila import log
+from aquila.env import KvPair
+from aquila.process import Command
+from aquila.blueprint import Blueprint, Entry
+from aquila.script import TclScript
 
 TCL_CODE_PROJ_SETTINGS = '''\
 # Set default configurations and device
@@ -58,56 +69,61 @@ class Step(Enum):
 
 class Quartz:
 
-    def __init__(self):
+    DEFAULT_PART = '10M50DAF484C7G'
+
+
+    def __init__(self, step: Step, part: str, generics: list, clock: KvPair, store: str):
+        '''
+        Construct a new Quartz instance.
+        '''
+
+        self.step = step
+        self.part = part
+        self.generics = generics
+        self.clock = clock
+        self.store = store
+
+        self.OUT_DIR = env.read('ORBIT_OUT_DIR')
+        self.TOP_NAME: str = str(env.read('ORBIT_TOP_NAME', missing_ok=False))
+        self.PROJECT_NAME: str = str(env.read('ORBIT_PROJECT_NAME'))
+
+        if self.part is None:
+            self.part = Quartz.DEFAULT_PART
+            log.info('using default part "'+self.part+'" since no part was selected')
+
+        self.sram_bitfile = self.TOP_NAME + '.sof'
+        self.flash_bitfile = self.TOP_NAME + '.pof'
+
+        self.tcl_path = self.OUT_DIR + '/' + 'run.tcl'
+        self.log_path = self.OUT_DIR + '/' + 'run.log'
+
+        self.entries = Blueprint().get_entries()
+
+    @staticmethod
+    def from_args(args: list):
         """
         Create a new instance of the quartus workflow.
         """
         parser = argparse.ArgumentParser(prog='quartz', allow_abbrev=False)
+
         parser.add_argument('--run', '-r', default='map', choices=['map', 'fit', 'asm', 'pgm'])
-        parser.add_argument("--device", action="store", default=None, type=str, help="set the targeted fpga device")
+        parser.add_argument("--part", action="store", default=None, type=str, help="set the targeted fpga device")
         parser.add_argument('--store', default='sram', choices=['flash', 'sram'], help='specify where to program the bitstream')
-        parser.add_argument('--generic', '-g', action='append', type=Generic.from_arg, default=[], metavar='key=value', help='override top-level VHDL generics')
+        parser.add_argument('--generic', '-g', action='append', type=KvPair.from_arg, default=[], metavar='KEY=VALUE', help='set top-level generics')
         parser.add_argument('--clock', '-c', metavar='NAME=FREQ', help='constrain a pin as a clock at the set frequency (MHz)')
-        args = parser.parse_args()
 
-        self.proc = Step.from_str(args.run)
-        self.part = '10M50DAF484C7G'
-        if args.device == None:
-            print('info: using default part "'+self.part+'" since no part was selected')
-        else:
-            self.part = args.device
+        args = parser.parse_args(args)
 
-        self.generics: list[Generic] = args.generic
-
-        self.PROG_FLASH = args.store.lower() == 'flash'
-
-        # capture the additional clock constraint
-        self.clock = None
-        if args.clock != None:
-            port, freq = args.clock.split('=')
-            period = 1.0/((float(freq)*1.0e6))*1.0e9
-            period = round(period, 3)
-            self.clock = (str(port), str(period))
-
-        self.output_path = Env.read('ORBIT_OUT_DIR')
-
-        self.top: str = str(Env.read('ORBIT_TOP_NAME', missing_ok=False))
-        
-        self.proj: str = str(Env.read('ORBIT_PROJECT_NAME'))
-
-        self.sram_bitfile = str(self.top)+'.sof'
-        self.flash_bitfile = str(self.top)+'.pof'
-
-        self.tcl_path = self.output_path + '/' + 'run.tcl'
-        self.log_path = self.output_path + '/' + 'run.log'
-
-        self.entries = []
-
-    def read_blueprint(self):
-        """
-        Process the blueprint contents.
-        """
-        self.entries = Blueprint().parse()
+        return Quartz(
+            step=Step.from_str(args.run),
+            part=args.part,
+            generics=args.generic,
+            clock=args.clock,
+            store=args.store
+        )
+    
+    def store_in_flash(self) -> bool:
+        return self.store == 'flash'
 
     def run(self):
         """
@@ -116,19 +132,22 @@ class Quartz:
         # Create the project
         Command('quartus_sh').args(['-t', self.tcl_path]).spawn().unwrap()
         # Run the requested workflow(s)
-        if self.proc.value >= Step.Syn.value:
+        if self.step.value >= Step.Syn.value:
             self.synthesize()
-        if self.proc.value >= Step.Pnr.value:
+        if self.step.value >= Step.Pnr.value:
             self.place_and_route()
-        if self.proc.value >= Step.Bit.value:
+        if self.step.value >= Step.Bit.value:
             self.write_bitstream()
-        if self.proc.value >= Step.Pgm.value:
+        if self.step.value >= Step.Pgm.value:
             self.program()
 
-    def write_tclscript(self):
+    def prepare(self):
         """
         Generate the target's tcl script to be used by vivado.
         """
+        # verify all generics are set
+        env.verify_all_generics_have_values(env.read('ORBIT_TOP_JSON'), self.generics)
+        # create the tcl script
         tcl = TclScript(self.tcl_path)
         # write required introduction tcl comments and commands
         self.import_prelude(tcl)
@@ -143,10 +162,11 @@ class Quartz:
         Generate any tcl that is required later in the script.
         """
         tcl.push('load_package flow')
-        tcl.push('project_new "'+self.proj+'" -revision "'+self.proj+'" -overwrite')
+        tcl.push('project_new "'+self.PROJECT_NAME+'" -revision "'+self.PROJECT_NAME+'" -overwrite')
         tcl.push('set_global_assignment -name DEVICE "'+self.part+'"')
-        tcl.push('set_global_assignment -name TOP_LEVEL_ENTITY "'+self.top+'"')
+        tcl.push('set_global_assignment -name TOP_LEVEL_ENTITY "'+self.TOP_NAME+'"')
         # set generics for top level entity
+        gen: KvPair
         for gen in self.generics:
             tcl.push('set_parameter -name "'+gen.key+'" "'+gen.val+'"')
         tcl.push(TCL_CODE_PROJ_SETTINGS)
@@ -157,7 +177,8 @@ class Quartz:
         workflow.
         """
         tcl.push()
-        tcl.comment('(1) Add source files')
+        tcl.comment_step('Add source files')
+        entry: Entry
         for entry in self.entries:
             if entry.is_vhdl():
                 tcl.push(['set_global_assignment', '-name', 'VHDL_FILE', '"'+entry.path+'"', '-library', entry.lib])
@@ -167,74 +188,74 @@ class Quartz:
                 tcl.push(['set_global_assignment', '-name', 'SYSTEMVERILOG_FILE', '"'+entry.path+'"', '-library', entry.lib])
             if entry.is_aux('SDCF'):
                 tcl.push(['set_global_assignment', '-name', 'SDC_FILE', '"'+entry.path+'"'])
-                pass
-    
+
         # create a clock constraint xdc
         if self.clock != None:
-            clock_sdc = TclScript('clock.sdc')
-            name, period = self.clock
-            clock_sdc.push(['create_clock', '-name', '{'+name+'}', '-period', period, '[get_ports { '+name+' }]'])
+            clock_sdc_path = self.OUT_DIR + '/' + 'clock.sdc'
+            clock_sdc = TclScript(clock_sdc_path)
+            port = self.clock.key
+            freq = self.clock.val
+
+            period = 1.0/((float(freq)*1.0e6))*1.0e9
+            period = round(period, 3)
+            self.clock = (str(port), str(period))
+
+            clock_sdc.push(['create_clock', '-name', '{'+port+'}', '-period', period, '[get_ports { '+port+' }]'])
             clock_sdc.save()
-            clock_sdc_path = self.output_path + '/' + clock_sdc.get_path()
-            tcl.push(['set_global_assignment', '-name', 'SDC_FILE', '"'+clock_sdc_path+'"'])
-            pass
+            tcl.push(['set_global_assignment', '-name', 'SDC_FILE', '"'+clock_sdc.get_path()+'"'])
 
     def synthesize(self):
         """
         Run the command for the Quartus project to perform synthesis.
         """
-        Command('quartus_map').arg(self.proj).spawn().unwrap()
+        Command(['quartus_map', self.PROJECT_NAME]).spawn().unwrap()
 
     def place_and_route(self):
         """
         Run the command for the Quartus project to perform place and route.
         """
-        Command('quartus_fit').arg(self.proj).spawn().unwrap()
-        Command('quartus_sta').arg(self.proj).spawn().unwrap()
+        Command(['quartus_fit', self.PROJECT_NAME]).spawn().unwrap()
+        Command(['quartus_sta', self.PROJECT_NAME]).spawn().unwrap()
 
     def write_bitstream(self):
         """
         Run the command for the Quartus project to generate the bitfile.
         """
-        Command("quartus_asm").arg(self.proj).spawn().unwrap()
-        Command('quartus_pow').arg(self.proj).spawn().unwrap()
+        Command(['quartus_asm', self.PROJECT_NAME]).spawn().unwrap()
+        Command(['quartus_pow', self.PROJECT_NAME]).spawn().unwrap()
 
     def program(self):
         """
         Run the commands to program a generated bitstream to a connected FPGA device.
         """
         # auto-detect the FPGA programming cable
-        out, status = Command("quartus_pgm").arg('-a').output()
+        out, status = Command(['quartus_pgm', '-a']).output()
         status.unwrap()
         if out.startswith('Error ') == True:
             print(out, end='')
-            exit(101)
+            log.error('failed to detect FPGA programing cable: exited with response: '+str(out))
         tokens = out.split()
         # grab the second token (cable name)
         CABLE = tokens[1]
-        pass
 
         prog_args = ['-c', CABLE, '-m', 'jtag', '-o']
         # program the FPGA board with temporary SRAM file
-        if self.PROG_FLASH == False:
+        if self.store_in_flash() == False:
             if os.path.exists(self.sram_bitfile) == True:
-                Command('quartus_pgm').args(prog_args).args(['p'+';'+self.sram_bitfile]).spawn().unwrap()
+                Command(['quartus_pgm'] + prog_args + ['p'+';'+self.sram_bitfile]).spawn().unwrap()
             else:
-                exit('error: failed to program device: bitstream file '+self.sram_bitfile+' not found')
-            pass
+                log.error('failed to program device: bitstream file '+self.sram_bitfile+' not found')
         # program the FPGA board with permanent program file
-        elif self.PROG_FLASH == True:
+        elif self.store_in_flash() == True:
             if os.path.exists(self.flash_bitfile) == True:
-                Command('quartus_pgm').args(prog_args).args(['bpv'+';'+self.flash_bitfile]).spawn().unwrap()
+                Command(['quartus_pgm'] + prog_args + ['bpv'+';'+self.flash_bitfile]).spawn().unwrap()
             else:
-                exit('error: failed to program device: bitstream file '+self.flash_bitfile+' not found')
-            pass
+                log.error('failed to program device: bitstream file '+self.flash_bitfile+' not found')
 
 
 def main():
-    quartz = Quartz()
-    quartz.read_blueprint()
-    quartz.write_tclscript()
+    quartz = Quartz.from_args(sys.argv[1:])
+    quartz.prepare()
     quartz.run()
 
     
