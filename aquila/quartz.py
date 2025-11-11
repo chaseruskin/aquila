@@ -220,7 +220,7 @@ class Quartz:
             with open(pdc_path, 'r') as fd:
                 pdc_dict = toml.loads(fd.read())
             for (pin, port) in pdc_dict.items():
-                tcl.push(['set_location_assignment', '-to', '"'+str(port)+'"', str(pin)])
+                tcl.push(['set_location_assignment', 'PIN_'+str(pin), '-to', '"'+str(port)+'"'])
 
     def synthesize(self):
         """
