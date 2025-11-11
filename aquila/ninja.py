@@ -30,10 +30,11 @@ class Ninja:
             self.implicit_deps = implicit_deps
             self.vars = vars
 
-    def __init__(self):
+    def __init__(self, parallel: int=1):
         """
         Create a new Ninja instance.
         """
+        self.parallel = parallel
         self.bindings = dict()
         self.rules = dict()
         self.builds = []
@@ -77,6 +78,12 @@ class Ninja:
                 # escape spaces in file paths
                 result += f.replace(' ', '$ ').replace(':', '$:') + ' '
             return result[:-1]
+        
+        # add pool
+        if self.parallel is not None:
+            data += '# Specify parallelism among rules\n'
+            data += 'pool pacific\n'
+            data += '  depth = ' + str(self.parallel) + '\n\n'
 
         # add default bindings
         if len(self.bindings) > 0:
@@ -103,6 +110,8 @@ class Ninja:
                 if len(build.implicit_deps) > 0:
                     data += ' | ' + fmt_file_list(build.implicit_deps)
                 data += '\n'
+                if self.parallel is not None:
+                    data += '  ' + 'pool = pacific\n' 
                 if len(build.vars) > 0:
                     sorted_vars = list(build.vars.keys())
                     sorted_vars.sort()
