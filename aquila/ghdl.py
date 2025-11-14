@@ -183,7 +183,7 @@ class Ghdl:
         if self._seed is not None:
             seed = '_seed=' + str(self._seed.get_seed())
 
-        full_path = base_dir + '/' + self.tb_name 
+        full_path = base_dir + '/' + self.top_sim_name 
         if len(seed) > 0 or len(gens) > 0:
             full_path += '_' + gens + seed
         return full_path
