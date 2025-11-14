@@ -40,9 +40,11 @@ class Ghdl:
         self._base_opts = ['--std=08', '--ieee=synopsys', '--workdir=build', '-P=build']
         self.dut_name = env.read('ORBIT_DUT_NAME')
         self.dut_path = env.read('ORBIT_DUT_FILE')
+        self.tb_name = env.read('ORBIT_TB_NAME')
         self.top_sim_lib = env.read('ORBIT_PROJECT_LIBRARY')
         self.out_path = env.read('ORBIT_OUT_DIR')
-        self.top_sim_name = self.dut_name
+        self.top_sim_name = self.dut_name if self.tb_name is None else self.tb_name
+        self.top_json = env.read('ORBIT_DUT_JSON') if env.read('ORBIT_TB_JSON') is None else env.read('ORBIT_TB_JSON')
         # verify we are using the json plan for incremental compilation
         bp_plan = self.bp.get_plan()
         if bp_plan != 'json':
@@ -68,7 +70,8 @@ class Ghdl:
         '''
         Writes a ninja build file.
         '''
-        env.verify_all_generics_have_values(env.read('ORBIT_DUT_JSON'), self._generics)
+        if self.top_json is not None:
+            env.verify_all_generics_have_values(self.top_json, self._generics)
 
         nj = Ninja()
 
@@ -101,16 +104,19 @@ class Ghdl:
         # build the list of source files
         status = Command(['ninja']).spawn()
         if status.is_err():
-            print('\n@@@ COMPILATION FAILED @@@\n')
+            print('\n@@@ COMPILATION COMPLETE [FAILED] @@@\n')
             exit(status.value)
         elif self._mode == Ghdl.COM_MODE:
-            print('\n@@@ COMPILATION COMPLETE @@@\n')
+            print('\n@@@ COMPILATION COMPLETE [PASSED] @@@\n')
             exit(status.value)
 
     def run(self, extra_args: list=[]):
         '''
         Run the simulation.
         '''
+        if self.top_sim_name is None:
+            log.error('no top-level specified: cannot run simulation')
+            
         fst_file = 'waves.fst'
         log_file = 'run.log'
         fcov_file = 'fcov.rpt'
@@ -158,11 +164,15 @@ class Ghdl:
             shutil.copyfile(log_path, regression_dir+'/'+log_file)
         print()
 
-        if status.is_ok():
-            print('@@@ SIMULATION PASSED @@@')
+        is_ok = status.is_ok()
+        is_ok = is_ok and self.analyze_results(log_path)
+
+        if is_ok:
+            print('@@@ SIMULATION COMPLETE [PASSED] @@@')
+            exit(0)
         else:
-            print('@@@ SIMULATION FAILED @@@')
-        status.unwrap()
+            print('@@@ SIMULATION COMPLETE [FAILED] @@@')
+            exit(101)
 
     def get_regression_dir(self) -> str:
         base_dir = self.out_path + '/' + 'regressions'
@@ -173,7 +183,7 @@ class Ghdl:
         if self._seed is not None:
             seed = '_seed=' + str(self._seed.get_seed())
 
-        full_path = base_dir + '/' + self.dut_name 
+        full_path = base_dir + '/' + self.tb_name 
         if len(seed) > 0 or len(gens) > 0:
             full_path += '_' + gens + seed
         return full_path
@@ -220,12 +230,28 @@ class Ghdl:
         with open(out_path, 'w') as fd:
             fd.write('\n'.join(annotated_src_code))
 
+    def analyze_results(self, log_file) -> bool:
+        '''
+        Parses simulation output to determine a proper exit code.
+
+        Returns True if passed, and False if failed.
+        '''
+        if os.path.exists(log_file) == False:
+            return False
+        has_err = False
+        with open(log_file, 'r') as fd:
+            has_err = fd.read().lower().count('error):')
+        if has_err:
+            return False
+        return True
 
 
 def main():
     ghdl = Ghdl.from_args(sys.argv[1:])
     ghdl.prepare()
+    log.info('compiling source files...')
     ghdl.compile()
+    log.info('running simulation...')
     ghdl.run()
 
 

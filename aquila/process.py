@@ -64,7 +64,7 @@ class Command:
         if verbose == True:
             command_line = self._command
             for c in self._args:
-                command_line += ' ' + env.__quote_str(c)
+                command_line += ' ' + '"'+c+'"'
             log.info(command_line)
         try:
             child = subprocess.Popen(job)
@@ -108,7 +108,7 @@ class Command:
         if verbose == True:
             command_line = self._command
             for c in self._args:
-                command_line += ' ' + env.__quote_str(c)
+                command_line += ' ' + '"'+c+'"'
             log.info(command_line)
         # execute the command and capture channels for stdout and stderr
         try:
