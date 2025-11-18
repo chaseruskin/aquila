@@ -9,6 +9,7 @@ import hashlib
 import glob
 import shutil
 import sys
+from enum import Enum
 
 from aquila import log
 from aquila import env
@@ -17,14 +18,34 @@ from aquila.env import KvPair, Seed
 from aquila.process import Command
 from aquila.ninja import Ninja
 
+
+class Mode(Enum):
+    COM = 0
+    SIM = 1
+
+    @staticmethod
+    def choices() -> list:
+        return ['com', 'sim']
+
+    @staticmethod
+    def from_str(s: str):
+        i = Mode.choices().index(s.lower())
+        if i == -1:
+            raise ValueError('invalid mode "'+s+'": can be one of '+str(Mode.choices()))
+        return Mode(i)
+    
+    @staticmethod
+    def from_arg(s: str):
+        if isinstance(s, Mode):
+            return s
+        elif isinstance(s, int):
+            return Mode(s)
+        return Mode.from_str(s)
+    
+
 class Ghdl:
 
-    SIM_MODE = 'sim'
-    COM_MODE = 'com'
-
-    MODES = [COM_MODE, SIM_MODE]
-
-    def __init__(self, mode: str, generics: list, seed: Seed, time_res: str):
+    def __init__(self, mode: Mode, generics: list, seed: Seed, time_res: str):
         '''
         Construct a new GHDL instance.
         '''
@@ -54,13 +75,13 @@ class Ghdl:
     def from_args(args: list):
         parser = argparse.ArgumentParser('ghdl', allow_abbrev=False)
 
-        parser.add_argument('--run', '-r', action='store', choices=Ghdl.MODES, default=Ghdl.SIM_MODE)
+        parser.add_argument('--run', '-r', action='store', type=str, choices=Mode.choices(), default=Mode.SIM)
         parser.add_argument('--generic', '-g', action='append', type=KvPair.from_arg, default=[], metavar='KEY=VALUE', help='set top-level generics')
         parser.add_argument('--time-res', '-t', metavar='UNITS', default='ps', help='set the simulation time resolution')
 
         args = parser.parse_args(args)
         return Ghdl(
-            mode=args.run,
+            mode=Mode.from_arg(args.run),
             generics=args.generic,
             seed=None,
             time_res=args.time_res,
@@ -106,7 +127,7 @@ class Ghdl:
         if status.is_err():
             print('\n@@@ COMPILATION COMPLETE [FAILED] @@@\n')
             exit(status.value)
-        elif self._mode == Ghdl.COM_MODE:
+        elif self._mode == Mode.COM:
             print('\n@@@ COMPILATION COMPLETE [PASSED] @@@\n')
             exit(status.value)
 
@@ -114,7 +135,7 @@ class Ghdl:
         '''
         Run the simulation.
         '''
-        if self.top_sim_name is None:
+        if self.tb_name is None:
             log.error('no top-level specified: cannot run simulation')
             
         fst_file = 'waves.fst'

@@ -1,4 +1,6 @@
-# Module for implementing structured ninja build system data.
+'''
+Module for implementing structured ninja build system data.
+'''
 
 class Ninja:
     """
