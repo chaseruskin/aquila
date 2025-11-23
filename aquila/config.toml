@@ -1,7 +1,7 @@
 [[protocol]]
 name = "git"
 description = "Download projects using git"
-command = ["git", "clone", "{{ orbit.project.repository }}", "-b", "{{ orbit.project.version }}"]
+command = ["git", "clone", "{{ orbit.project.source }}", "-b", "{{ orbit.project.version }}"]
 patterns = ["*.git"]
 
 [[target]]
@@ -31,7 +31,7 @@ fileset.wav = "{{ orbit.tb.name }}.do"
 
 [[target]]
 name = "quartz"
-description = "Intel Quartus Prime toolflow"
+description = "Run FPGA workflows with Quartus"
 command = ["python3", "quartz.py"]
 build = true
 test = false
