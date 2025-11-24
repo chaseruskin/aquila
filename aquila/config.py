@@ -1,6 +1,6 @@
-'''
+"""
 Reports package configurations.
-'''
+"""
 
 import argparse
 import sys
@@ -8,9 +8,9 @@ import os
 
 
 def get_config_path() -> str:
-    '''
+    """
     Returns the absolute path to the Orbit configuration file packaged with Aquila.
-    '''
+    """
     abs_cfg_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'config.toml')).replace('\\', '/')
     return abs_cfg_path
 

@@ -1,6 +1,6 @@
-'''
+"""
 Logic and control for interfacing with the Vivado FPGA toolchain.
-'''
+"""
 
 # Provides the glue logic between a filelist and the Xilinx Vivado EDA tool.
 # This script generates a tcl script and executes it using Vivado in a 
@@ -27,7 +27,7 @@ from aquila.script import TclScript
 from aquila.ninja import Ninja
 
 
-TCL_PROC_REPORT_CRITPATHS = '''\
+TCL_PROC_REPORT_CRITPATHS = """\
 # Generate a CSV file that provides a summary of the first 50 violations for
 # both setup and hold analysis (maximum of 100 paths are reported).
 proc report_critical_paths { file_name } {
@@ -60,13 +60,13 @@ proc report_critical_paths { file_name } {
     puts "info: wrote critical path csv file $file_name"
     return 0
 };
-'''
+"""
 
 
 class Step(Enum):
-    '''
+    """
     Enumeration of the possible workflows to run using vivado.
-    '''
+    """
     Syn = 0
     Plc = 1
     Rte = 2
@@ -75,9 +75,9 @@ class Step(Enum):
     
     @staticmethod
     def from_str(s: str):
-        '''
+        """
         Convert a `str` datatype into a `Step`.
-        '''
+        """
         s = str(s).lower()
         if s == 'syn':
             return Step.Syn
@@ -93,9 +93,9 @@ class Step(Enum):
 
 
 class Vi:
-    '''
+    """
     Interface for backend build process for the Vivado FPGA toolchain.
-    '''
+    """
 
     # Part to use when one is not specified by the user
     DEFAULT_PART = 'xc7s25-csga324'
@@ -111,9 +111,9 @@ class Vi:
     }
 
     def __init__(self, step: str, part: str, generics: list, clock: KvPair):
-        '''
+        """
         Construct a new Vi instance.
-        '''
+        """
         self.man = Manifest()
         self.bp = Blueprint()
         self.entries = self.bp.get_entries()
@@ -149,9 +149,9 @@ class Vi:
 
     @staticmethod
     def from_args(args: list):
-        '''
+        """
         Construct a new Vi instance from a set of arguments.
-        '''
+        """
         parser = argparse.ArgumentParser(prog='vi', allow_abbrev=False)
 
         parser.add_argument('--run', '-r', default='syn', choices=['syn', 'plc', 'rte', 'bit', 'pgm'], help='select the workflow to execute')
@@ -168,9 +168,9 @@ class Vi:
         )
 
     def prepare(self):
-        '''
+        """
         Generate the target's tcl script to be used by vivado.
-        '''
+        """
         env.verify_all_generics_have_values(env.read('ORBIT_TOP_JSON'), self.generics)
 
         vivado_cmd = 'vivado' if os.name != 'nt' else 'vivado.bat'
@@ -217,9 +217,9 @@ class Vi:
         self.nj.save()
         
     def import_prelude(self, tcl: TclScript):
-        '''
+        """
         Generate any tcl that is required later in the script.
-        '''
+        """
         tcl.push(TCL_PROC_REPORT_CRITPATHS)
         tcl.comment('Disable webtalk')
         tcl.push('config_webtalk -user off')
@@ -229,10 +229,10 @@ class Vi:
                 tcl.push('set_msg_config -id {'+msg+'} -new_severity {'+lvl+'}')
 
     def add_sources(self, tcl: TclScript):
-        '''
+        """
         Generate the tcl commands required to add sources to the non-project mode
         workflow.
-        '''
+        """
         tcl.push()
         tcl.comment_step('Add source files')
         entry: Entry
@@ -271,9 +271,9 @@ class Vi:
         return src_files
     
     def requires_save(self, tcl: TclScript) -> bool:
-        '''
+        """
         Check if this TCL script requires saving (overwriting its existing contents).
-        '''
+        """
         contents_match = False
         if os.path.exists(tcl.get_path()):
             existing_data = ''
@@ -283,9 +283,9 @@ class Vi:
         return contents_match == False
 
     def synthesize(self, tcl: TclScript) -> str:
-        '''
+        """
         Generate tcl commands for performing synthesis.
-        '''
+        """
         dcp = 'post_syn.dcp'
         tcl.push()
         tcl.comment_step('Run synthesis task')
@@ -300,9 +300,9 @@ class Vi:
         return dcp
 
     def place(self, tcl: TclScript, last_dcp: str):
-        '''
+        """
         Generate tcl commands for performing optimizations and placement.
-        '''
+        """
         dcp = 'post_plc.dcp'
         tcl.push()
         tcl.comment_step('Load previous design checkpoint')
@@ -328,9 +328,9 @@ class Vi:
         return dcp
 
     def route(self, tcl: TclScript, last_dcp: str):
-        '''
+        """
         Generate tcl commands for performing routing.
-        '''
+        """
         dcp = 'post_rte.dcp'
         tcl.push()
         tcl.comment_step('Load previous design checkpoint')
@@ -349,9 +349,9 @@ class Vi:
         return dcp
 
     def bitstream(self, tcl: TclScript, last_dcp: str):
-        '''
+        """
         Generate the tcl commands to write the bitstream.
-        '''
+        """
         tcl.push()
         tcl.comment_step('Load previous design checkpoint')
         tcl.push('open_checkpoint '+last_dcp)
@@ -363,9 +363,9 @@ class Vi:
         return self.bit_file
 
     def program(self, tcl: TclScript):
-        '''
+        """
         Generate the tcl commands to program the bitstream to a board.
-        '''
+        """
         tcl.push()
         tcl.comment_step('Program the connected FPGA device')
         tcl.push('open_hw_manager')
@@ -386,9 +386,9 @@ class Vi:
             tcl.save()
 
     def run(self):
-        '''
+        """
         Invoke vivado in batch mode to run the generated tcl script.
-        '''
+        """
         cmd = [] if self.top_cmd is None else [self.top_cmd]
         stat = Command(['ninja'] + cmd).spawn()
         # report to the user where the log can be found

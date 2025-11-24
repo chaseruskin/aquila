@@ -1,6 +1,6 @@
-'''
+"""
 Backend target process for simulations with GHDL.
-'''
+"""
 
 import argparse
 from typing import List
@@ -46,9 +46,9 @@ class Mode(Enum):
 class Ghdl:
 
     def __init__(self, mode: Mode, generics: list, seed: Seed, time_res: str):
-        '''
+        """
         Construct a new GHDL instance.
-        '''
+        """
         self._mode = mode
         self._generics: List[KvPair] = generics
         self._time_res = time_res
@@ -88,9 +88,9 @@ class Ghdl:
         )
 
     def prepare(self):
-        '''
+        """
         Writes a ninja build file.
-        '''
+        """
         if self.top_json is not None:
             env.verify_all_generics_have_values(self.top_json, self._generics)
 
@@ -119,9 +119,9 @@ class Ghdl:
         nj.save()
 
     def compile(self):
-        '''
+        """
         Calls ninja to compile the source files.
-        '''
+        """
         # build the list of source files
         status = Command(['ninja']).spawn()
         if status.is_err():
@@ -132,9 +132,9 @@ class Ghdl:
             exit(status.value)
 
     def run(self, extra_args: list=[]):
-        '''
+        """
         Run the simulation.
-        '''
+        """
         if self.tb_name is None:
             log.error('no top-level specified: cannot run simulation')
             
@@ -210,9 +210,9 @@ class Ghdl:
         return full_path
 
     def generate_code_coverage_file(self, table: dict, out_path: str):
-        '''
+        """
         Reads the structured json `table` and writes a nicer code coverage file.
-        '''
+        """
         summary = '0/0 100.0%'
 
         hit_lines = 0
@@ -252,11 +252,11 @@ class Ghdl:
             fd.write('\n'.join(annotated_src_code))
 
     def analyze_results(self, log_file) -> bool:
-        '''
+        """
         Parses simulation output to determine a proper exit code.
 
         Returns True if passed, and False if failed.
-        '''
+        """
         if os.path.exists(log_file) == False:
             return False
         has_err = False

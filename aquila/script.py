@@ -1,14 +1,14 @@
 from abc import ABC
 
 class ScriptFile(ABC):
-    '''
+    """
     Wrapper to help write scripts in Python.
-    '''
+    """
 
     def __init__(self, path: str):
-        '''
+        """
         Create a new script destined to be written to `path`.
-        '''
+        """
         self._file: str = path
         self._data: str = ''
         self._indent: int = 0
@@ -19,9 +19,9 @@ class ScriptFile(ABC):
         self.push()
 
     def push(self, line='', end='\n'):
-        '''
+        """
         Append a new line to the current script.
-        '''
+        """
         if isinstance(line, str):
             self._data += (self._TAB*self._indent) + line
         elif isinstance(line, list):
@@ -37,61 +37,61 @@ class ScriptFile(ABC):
         self._data += end
 
     def comment_step(self, msg, end='\n', token='#'):
-        '''
+        """
         Writes a comment as a step on a new line for the current script.
-        '''
+        """
         self._data += (self._TAB*self._indent) + token + '('+str(self._step)+') ' + str(msg)
         self._data += end
         self._step += 1
 
     def comment(self, msg, end='\n', token='#'):
-        '''
+        """
         Write a comment on a new line for the current script
-        '''
+        """
         self._data += (self._TAB*self._indent) + token + ' ' + str(msg)
         self._data += end
 
     def save(self):
-        '''
+        """
         Write the script contents to the file.
-        '''
+        """
         with open(self._file, 'w') as f:
             f.write(self._data)
 
     def indent(self):
-        '''
+        """
         Increment the indentation level for readability purposes.
-        '''
+        """
         self._indent += 1
 
     def dedent(self):
-        '''
+        """
         Decrement the indentation level for readability purposes.
-        '''
+        """
         self._indent -= 1
         if self._indent < 0:
             self._indent = 0
 
     def get_path(self) -> str:
-        '''
+        """
         Return the file system path for this script.
-        '''
+        """
         return self._file
     
     def get_data(self) -> str:
-        '''
+        """
         Returns the string contents it would write to a file.
-        '''
+        """
         return self._data
 
 class TclScript(ScriptFile):
-    '''
+    """
     Wrapper to help write tcl scripts in Python.
-    '''
+    """
     pass
 
 class DoFile(ScriptFile):
-    '''
+    """
     Wrapper to help write do files in Python.
-    '''
+    """
     pass

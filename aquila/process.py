@@ -7,9 +7,9 @@ from . import env
 from . import log
 
 class Status(Enum):
-    '''
+    """
     An indication of whether a process is okay or not.
-    '''
+    """
     OKAY = 0
     FAIL = 101
 
@@ -38,9 +38,9 @@ class Status(Enum):
 
 
 class Command:
-    '''
+    """
     A invocation of a command along with any arguments.
-    '''
+    """
 
     def __init__(self, args: list):
         self._command = shutil.which(args[0])
@@ -75,9 +75,9 @@ class Command:
         return Status.from_int(status)
     
     def stream(self, path: str, mode: str='w') -> Status:
-        '''
+        """
         Writes the stdout and stderr to the terminal while also recording it to a file.
-        '''
+        """
         import re
         def execute(cmd):
             popen = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)

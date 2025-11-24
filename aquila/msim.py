@@ -1,6 +1,6 @@
-'''
+"""
 Backend target process for simulations with ModelSim.
-'''
+"""
 
 # Runs ModelSim workflows for HDL simulations.
 #
@@ -50,9 +50,9 @@ class Msim:
 
     @staticmethod
     def from_args(args: list):
-        '''
+        """
         Construct a new Msim instance from a set of arguments.
-        '''
+        """
         parser = argparse.ArgumentParser(prog='msim', allow_abbrev=False)
 
         parser.add_argument('--run', '-r', metavar='MODE', default='sim', choices=Mode.get_choices(), help='specify the mode to run')
@@ -65,9 +65,9 @@ class Msim:
         )
 
     def __init__(self, step: Mode, generics: list):
-        '''
+        """
         Construct a new Msim instance.
-        '''
+        """
         self.bp = Blueprint()
         # capture arguments into instance variables
         self.mode = step
@@ -99,9 +99,9 @@ class Msim:
         env.write('MODELSIM', self.ini_file)
 
     def prepare_compilation(self):
-        '''
+        """
         Writes a ninja build file.
-        '''
+        """
 
         if self.mode.value != Mode.COMP.value:
             env.verify_all_generics_have_values(env.read('ORBIT_TB_JSON'), self.generics)
@@ -133,9 +133,9 @@ class Msim:
         nj.save()
 
     def compile(self):
-        '''
+        """
         Calls ninja to compile the source files.
-        '''
+        """
         if os.path.exists(self.ini_file) == False:
             Command(['vmap', '-quiet', '-c']).spawn()
         # build the list of source files
@@ -151,9 +151,9 @@ class Msim:
             exit(status.value)
 
     def prepare_run(self):
-        '''
+        """
         Generate the series of do file commands to implement the requested workflow.
-        '''
+        """
         do = DoFile(self.do_file)
         if self.mode == Mode.SIM or self.mode == Mode.GUI:
             self.initialize(do)
@@ -162,9 +162,9 @@ class Msim:
         do.save()
 
     def initialize(self, do: DoFile):
-        '''
+        """
         Adds commands to initialize the simulation with vsim.
-        '''
+        """
         do.comment_step('Map libraries')
         for (lib, path) in self.libs:
             do.push(['vmap', '-quiet', lib, path])
@@ -199,17 +199,17 @@ class Msim:
                 do.push('configure wave -signalnamewidth 1')
 
     def simulate(self, do: DoFile):
-        '''
+        """
         Adds commands to simulate the design with vsim.
-        '''
+        """
         do.comment_step('Run the simulation')
         do.push('run -all')
         do.push('quit')
 
     def run(self):
-        '''
+        """
         Invoke modelsim to run the generated do file workflow.
-        '''
+        """
         status = Command(['vsim', 
             '-batch' if not self.mode == Mode.GUI else '-gui', 
             '-do', self.do_file,

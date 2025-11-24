@@ -1,6 +1,6 @@
-'''
+"""
 Module for orchestrating cocotb configurations.
-'''
+"""
 
 import os
 import sys

@@ -1,15 +1,15 @@
-'''
+"""
 Wrapper module for accessing/modifying environment variables.
-'''
+"""
 
 import os
 import toml
 from aquila import log
 
 class KvPair:
-    '''
+    """
     A key-value pair, useful for storing generics/parameters provided on the command-line.
-    '''
+    """
     def __init__(self, key: str, val: str):
         self.key = key
         self.val = val
@@ -39,9 +39,9 @@ class KvPair:
     
 
 class Seed:
-    '''
+    """
     An integer value used to set randomness.
-    '''
+    """
 
     MIN_SEED_VALUE = 0
     MAX_SEED_VALUE = (2**32)-1
@@ -53,9 +53,9 @@ class Seed:
             self.seed = random.randint(Seed.MIN_SEED_VALUE, Seed.MAX_SEED_VALUE)
     
     def get_seed(self) -> int:
-        '''
+        """
         Returns the random seed.
-        '''
+        """
         return self.seed
     
     @staticmethod
@@ -74,11 +74,11 @@ class Manifest:
             self.data = toml.loads(fd.read())
 
     def get(self, table: str):
-        '''
+        """
         Attempts to fetch data from `table` with the internal TOML dictionary.
 
         Returns None if missing a key along with way.
-        '''
+        """
         parts = table.split('.')
         subtable = self.data
         for p in parts:
@@ -90,13 +90,13 @@ class Manifest:
     
 
 def verify_all_generics_have_values(data: str, cli: list) -> bool:
-    '''
+    """
     Verifies all generics have some value, either from the command-line or as a default, where
     `data` is the raw string holding the serialized data of the top-level and `cli` is the list of generics passed
     from the command-line.
 
     Exits 101 if a generic value is not supplied.
-    '''
+    """
     import json
     cli_gens = {}
     gen: KvPair
@@ -135,9 +135,9 @@ def write(key: str, value: str):
 
 
 def add_path(path: str, key: str='PATH') -> bool:
-    '''
+    """
     Adds the `path` to the environment variable `key`.
-    '''
+    """
     if path is not None and os.path.exists(path) and len(path) > 0 and os.getenv(key) is None:
         os.environ[key] = path
         return True
@@ -164,7 +164,7 @@ def append(key, value: str):
 
 
 def __quote_str(s: str) -> str:
-    '''
+    """
     Wraps the string `s` around double quotes `\"` characters."
-    '''
+    """
     return '\"' + s + '\"'

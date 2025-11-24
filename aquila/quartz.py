@@ -1,6 +1,6 @@
-'''
+"""
 Logic and control for interfacing with the Quartus FPGA toolchain.
-'''
+"""
 
 # Creates a Quartus project to execute any stage of the FPGA toolchain
 # workflow. This script has the ability to override the top-level generics
@@ -26,7 +26,7 @@ from aquila.process import Command
 from aquila.blueprint import Blueprint, Entry
 from aquila.script import TclScript
 
-TCL_CODE_PROJ_SETTINGS = '''\
+TCL_CODE_PROJ_SETTINGS = """\
 # Set default configurations and device
 set_global_assignment -name NUM_PARALLEL_PROCESSORS "ALL"
 set_global_assignment -name VHDL_INPUT_VERSION VHDL_2008
@@ -40,7 +40,7 @@ set_global_assignment -name USE_CONFIGURATION_DEVICE OFF
 set_global_assignment -name INTERNAL_FLASH_UPDATE_MODE "SINGLE IMAGE WITH ERAM" 
 # Configure tri-state for unused pins     
 set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED"
-'''
+"""
 
 class Step(Enum):
     """
@@ -73,9 +73,9 @@ class Quartz:
     DEFAULT_PART = '10M50DAF484C7G'
 
     def __init__(self, step: Step, part: str, generics: list, clock: KvPair, store: str):
-        '''
+        """
         Construct a new Quartz instance.
-        '''
+        """
 
         self.man = Manifest()
 
