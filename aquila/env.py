@@ -3,7 +3,6 @@ Wrapper module for accessing/modifying environment variables.
 """
 
 import os
-import toml
 from aquila import log
 
 class KvPair:
@@ -37,6 +36,16 @@ class KvPair:
     def __str__(self):
         return self.key+'='+self.val
     
+    @staticmethod
+    def into_dict(pairs: list) -> dict:
+        """
+        Takes a list of KvPair instances and translates them into a dictionary.
+        """
+        result = {}
+        for p in pairs:
+            result[p.key] = p.val
+        return result
+    
 
 class Seed:
     """
@@ -65,31 +74,7 @@ class Seed:
         return Seed(s)
     
 
-class Manifest:
-
-    def __init__(self, path: str=None):
-        self.path = path if path is not None else read('ORBIT_MANIFEST_FILE', missing_ok=False)
-        self.data = dict()
-        with open(self.path, 'r') as fd:
-            self.data = toml.loads(fd.read())
-
-    def get(self, table: str):
-        """
-        Attempts to fetch data from `table` with the internal TOML dictionary.
-
-        Returns None if missing a key along with way.
-        """
-        parts = table.split('.')
-        subtable = self.data
-        for p in parts:
-            try:
-                subtable = subtable[p]
-            except:
-                return None
-        return subtable
-    
-
-def verify_all_generics_have_values(data: str, cli: list) -> bool:
+def verify_all_generics_have_values(data: dict, gens: dict) -> bool:
     """
     Verifies all generics have some value, either from the command-line or as a default, where
     `data` is the raw string holding the serialized data of the top-level and `cli` is the list of generics passed
@@ -97,18 +82,12 @@ def verify_all_generics_have_values(data: str, cli: list) -> bool:
 
     Exits 101 if a generic value is not supplied.
     """
-    import json
-    cli_gens = {}
-    gen: KvPair
-    for gen in cli:
-        cli_gens[gen.key.lower()] = gen.val
-    
-    dut_gens = json.loads(data)['generics']
+    dut_gens = data['generics']
     missing_gen = False
     for gen in dut_gens:
         if gen['default'] is None:
-            if gen['identifier'].lower() not in cli_gens:
-                log.error('missing value for generic "'+gen['identifier']+'"', exit_on_err=False)
+            if gen['name'] not in gens:
+                log.error('missing value for generic "'+gen['name']+'"', exit_on_err=False)
                 missing_gen = True
     if missing_gen == True:
         exit(101)

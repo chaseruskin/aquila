@@ -5,7 +5,6 @@ Backend target process for simulations with GHDL.
 import argparse
 from typing import List
 import os
-import hashlib
 import glob
 import shutil
 import sys
@@ -17,6 +16,8 @@ from aquila.blueprint import Blueprint, Entry
 from aquila.env import KvPair, Seed
 from aquila.process import Command
 from aquila.ninja import Ninja
+from aquila.manifest import TestRunner, TestModule
+from aquila import manifest as man
 
 
 class Mode(Enum):
@@ -45,12 +46,12 @@ class Mode(Enum):
 
 class Ghdl:
 
-    def __init__(self, mode: Mode, generics: list, seed: Seed, time_res: str):
+    def __init__(self, mode: Mode, generics: dict, seed: Seed, time_res: str):
         """
         Construct a new GHDL instance.
         """
         self._mode = mode
-        self._generics: List[KvPair] = generics
+        self._generics = generics
         self._time_res = time_res
         self._seed = seed
         # additional instance variables
@@ -59,13 +60,8 @@ class Ghdl:
         self.work_lib = env.read('ORBIT_PROJECT_LIBRARY')
         self.libs = set()
         self._base_opts = ['--std=08', '--ieee=synopsys', '--workdir=build', '-P=build']
-        self.dut_name = env.read('ORBIT_DUT_NAME')
-        self.dut_path = env.read('ORBIT_DUT_FILE')
-        self.tb_name = env.read('ORBIT_TB_NAME')
         self.top_sim_lib = env.read('ORBIT_PROJECT_LIBRARY')
         self.out_path = env.read('ORBIT_OUT_DIR')
-        self.top_sim_name = self.dut_name if self.tb_name is None else self.tb_name
-        self.top_json = env.read('ORBIT_DUT_JSON') if env.read('ORBIT_TB_JSON') is None else env.read('ORBIT_TB_JSON')
         # verify we are using the json plan for incremental compilation
         bp_plan = self.bp.get_plan()
         if bp_plan != 'json':
@@ -82,7 +78,7 @@ class Ghdl:
         args = parser.parse_args(args)
         return Ghdl(
             mode=Mode.from_arg(args.run),
-            generics=args.generic,
+            generics=KvPair.into_dict(args.generic),
             seed=None,
             time_res=args.time_res,
         )
@@ -91,15 +87,7 @@ class Ghdl:
         """
         Writes a ninja build file.
         """
-        if self.top_json is not None:
-            env.verify_all_generics_have_values(self.top_json, self._generics)
-
         nj = Ninja()
-
-        def gen_out_file_name(path: str):
-            name = os.path.splitext(os.path.basename(path))[0]
-            sum = hashlib.sha1(bytes(path, 'utf-8')).hexdigest()[:8]
-            return 'build/' + name + '.' + sum
 
         nj.add_def_var('lib', 'work')
         nj.add_def_var('opts', '-a '+' '.join(self._base_opts))
@@ -112,18 +100,33 @@ class Ghdl:
                 continue
             self.libs.add((entry.lib, entry.lib))
             rule = entry.fset.lower()
-            out = gen_out_file_name(entry.path)
-            deps = [gen_out_file_name(p) for p in entry.deps]
+            out = Ninja.create_output_filename(entry.path)
+            deps = [Ninja.create_output_filename(p) for p in entry.deps]
             # add the build into the dependency graph
             nj.add_build(rule, [out], [entry.path], deps, {'lib': entry.lib})
         nj.save()
 
-    def compile(self):
+    def configure(self, dut, tb, generics):
+        self.dut_name = dut
+        self.tb_name = tb
+        self.top_sim_name = self.dut_name if self.tb_name is None else self.tb_name
+        self.top_generics = generics
+
+    def compile(self) -> bool:
         """
         Calls ninja to compile the source files.
+
+        Returns true if the test passed "okay"
         """
+        top_json = man.get_unit_json(self.top_sim_name)
+        if top_json is None:
+            log.error('failed to get json data for unit:', self.top_sim_name)
+        env.verify_all_generics_have_values(top_json, self.top_generics)
+
+        nj_recipe = Ninja.create_output_filename(top_json['file'])
+
         # build the list of source files
-        status = Command(['ninja']).spawn()
+        status = Command(['ninja', '--quiet', nj_recipe]).spawn()
         if status.is_err():
             print('\n@@@ COMPILATION COMPLETE [FAILED] @@@\n')
             exit(status.value)
@@ -131,9 +134,11 @@ class Ghdl:
             print('\n@@@ COMPILATION COMPLETE [PASSED] @@@\n')
             exit(status.value)
 
-    def run(self, extra_args: list=[]):
+    def run(self, out_dir: str, extra_args: list=[]):
         """
         Run the simulation.
+
+        Returns whether the simulation passed and the log file it wrote to.
         """
         if self.tb_name is None:
             log.error('no top-level specified: cannot run simulation')
@@ -154,7 +159,7 @@ class Ghdl:
             '--work='+self.top_sim_lib,
             self.top_sim_name, 
             '--fst='+fst_path,
-        ] + ['-g' + item.to_str() for item in self._generics] + extra_args).stream(log_path)
+        ] + ['-g' + str(k)+'='+str(v) for (k, v) in self.top_generics.items()] + extra_args).record(log_path)
         
         ccov_files = glob.glob(self.out_path + '/coverage-*.json')
         # create the code cover report (TODO: go back use `ghdl coverage` command)
@@ -168,47 +173,30 @@ class Ghdl:
             os.remove(cf)
 
         # save off files as regression
-        regression_dir = self.get_regression_dir()
+        regression_dir = self.out_path + '/' + 'regressions' + '/' + out_dir
         os.makedirs(regression_dir, exist_ok=True)
 
-        print()
+        final_log_path = None
+        # print()
         if os.path.exists(ccov_path):
-            log.info('code coverage report available at: \"'+ccov_path+'\"')
+            # log.info('code coverage report available at: \"'+ccov_path+'\"')
             shutil.copyfile(ccov_path, regression_dir+'/'+ccov_file)
         if os.path.exists(fcov_path):
-            log.info('functional coverage report available at: \"'+fcov_path+'\"')
+            # log.info('functional coverage report available at: \"'+fcov_path+'\"')
             shutil.copyfile(fcov_path, regression_dir+'/'+fcov_file)
         if os.path.exists(fst_file):
-            log.info('simulation waveform available at: \"'+fst_path+'\"')
+            # log.info('simulation waveform available at: \"'+fst_path+'\"')
+            pass
         if os.path.exists(log_path):
-            log.info('simulation log available at: \"'+log_path+'\"')
-            shutil.copyfile(log_path, regression_dir+'/'+log_file)
-        print()
+            # log.info('simulation log available at: \"'+log_path+'\"')
+            final_log_path = regression_dir+'/'+log_file
+            shutil.copyfile(log_path, final_log_path)
 
         is_ok = status.is_ok()
         is_ok = is_ok and self.analyze_results(log_path)
 
-        if is_ok:
-            print('@@@ SIMULATION COMPLETE [PASSED] @@@')
-            exit(0)
-        else:
-            print('@@@ SIMULATION COMPLETE [FAILED] @@@')
-            exit(101)
-
-    def get_regression_dir(self) -> str:
-        base_dir = self.out_path + '/' + 'regressions'
-        gens = ''
-        for g in self._generics:
-            gens += '_'+g.key+'='+g.val.replace('.', '-').replace('/', '-').replace('\\', '-')
-        seed = ''
-        if self._seed is not None:
-            seed = '_seed=' + str(self._seed.get_seed())
-
-        full_path = base_dir + '/' + self.top_sim_name 
-        if len(seed) > 0 or len(gens) > 0:
-            full_path += '_' + gens + seed
-        return full_path
-
+        return is_ok, final_log_path
+  
     def generate_code_coverage_file(self, table: dict, out_path: str):
         """
         Reads the structured json `table` and writes a nicer code coverage file.
@@ -269,11 +257,25 @@ class Ghdl:
 
 def main():
     ghdl = Ghdl.from_args(sys.argv[1:])
+    runner = TestRunner(
+        default=TestModule(env.read('ORBIT_DUT_NAME'), env.read('ORBIT_TB_NAME'), ghdl._generics)
+    )
     ghdl.prepare()
-    log.info('compiling source files...')
-    ghdl.compile()
-    log.info('running simulation...')
-    ghdl.run()
+
+    runner.disp_start()
+
+    tm: TestModule
+    for tm in runner.get_modules():
+        runner.disp_trial_start(tm)
+        ghdl.configure(tm.get_dut(), tm.get_tb(), tm.get_generics())
+        ghdl.compile()
+        runner.disp_trial_progress()
+        ok, log = ghdl.run(tm.get_dirname())
+        runner.disp_trial_result(ok, log)
+
+    all_ok = runner.disp_result()
+    if all_ok == False:
+        exit(101)
 
 
 if __name__ == '__main__':

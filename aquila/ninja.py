@@ -128,3 +128,14 @@ class Ninja:
         """
         with open(path, 'w') as fd:
             fd.write(str(self))
+
+    @staticmethod
+    def create_output_filename(path: str, outdir: str='build'):
+        """
+        Generates the output filename for the given input path.
+        """
+        import os
+        import hashlib
+        name = os.path.splitext(os.path.basename(path))[0]
+        sum = hashlib.sha1(bytes(path, 'utf-8')).hexdigest()[:8]
+        return outdir + '/' + name + '.' + sum

@@ -21,7 +21,8 @@ import toml
 
 from aquila import env
 from aquila import log
-from aquila.env import KvPair, Manifest
+from aquila.env import KvPair
+from aquila.manifest import Manifest
 from aquila.process import Command
 from aquila.blueprint import Blueprint, Entry
 from aquila.script import TclScript

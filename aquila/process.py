@@ -3,8 +3,8 @@ import subprocess
 from typing import List, Tuple
 from enum import Enum
 
-from . import env
-from . import log
+from aquila import env
+from aquila import log
 
 class Status(Enum):
     """
@@ -74,6 +74,23 @@ class Command:
         status = child.wait()
         return Status.from_int(status)
     
+    def record(self, path: str, mode: str='w') -> Status:
+        """
+        Writes the stdout and stderr to a file at `path`.
+        """
+        import re
+        with open(path, mode) as fd:
+            popen = subprocess.Popen([self._command] + self._args, stdout=fd, stderr=fd)
+            status = popen.wait()
+        text = ''
+        with open(path, 'r') as fd:
+            text = fd.read()
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        text = ansi_escape.sub('', text)
+        with open(path, 'w') as fd:
+            fd.write(text)
+        return Status.from_int(status)
+    
     def stream(self, path: str, mode: str='w') -> Status:
         """
         Writes the stdout and stderr to the terminal while also recording it to a file.
@@ -103,6 +120,11 @@ class Command:
         return Status.OKAY
 
     def output(self, verbose: bool=False) -> Tuple[str, Status]:
+        """
+        Captures a subprocess's command output (stdout) to a string.
+
+        Still outputs diagnostic output (stderr) to the console.
+        """
         job = [self._command] + self._args
         # display the command being executed
         if verbose == True:
