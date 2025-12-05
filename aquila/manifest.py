@@ -127,8 +127,8 @@ class TestRunner:
                 generics = trial.get('generics', {})
                 seed = trial.get('seed')
                 self.modules += [TestModule(dut, tb, generics, seed)]
-        if len(self.table) == 0 and default is not None and default.is_valid():
-            self.modules += [default]
+        if default is not None and default.is_valid():
+            self.modules = [default]
         
         self.num_trials = len(self.modules)
 
