@@ -6,6 +6,7 @@ import toml
 from aquila import env
 from aquila.process import Command
 import json
+import time
 from termcolor import colored
 from aquila import log
 
@@ -108,6 +109,7 @@ class TestRunner:
         Creates a new instance of the test runner
         """
         self.num_passed = 0
+        self.start_time = None
 
         self.table = table if table is not None else Manifest().get('project.metadata.test')
 
@@ -146,6 +148,8 @@ class TestRunner:
         word = 'test' if self.num_trials == 1 else 'tests'
         stmt = '\nrunning '+str(self.num_trials)+' '+word
         print(stmt)
+        # record the start time
+        self.start_time = time.perf_counter()
     
     def disp_trial_start(self, trial: TestModule):
         stmt = 'test ' + str(trial)
@@ -166,15 +170,21 @@ class TestRunner:
         print(stmt)
 
     def disp_result(self) -> bool:
+        # record the end time
+        self.end_time = time.perf_counter()
+
         all_ok = self.num_passed == self.num_trials
         self.num_failed = self.num_trials - self.num_passed
+
+        # determine how many seconds elapsed from start to finish
+        elapsed = self.end_time - self.start_time
         
         stmt = '\ntest result: '
         if all_ok:
             stmt += colored('ok', "green")
         else:
             stmt += colored('failed', 'red')
-        stmt += '. '+str(self.num_passed)+' passed; '+str(self.num_failed)+' failed'
+        stmt += '. '+str(self.num_passed)+' passed; '+str(self.num_failed)+' failed; '+'finished in '+str(round(elapsed, 2))+'s\n'
         print(stmt)
         return all_ok
     
